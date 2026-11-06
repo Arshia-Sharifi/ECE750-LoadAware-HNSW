@@ -1,0 +1,10 @@
+data/
+results/
+cpp/build*/
+build/
+*.log
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+cpp/third_party/hnsw-ada-ef/

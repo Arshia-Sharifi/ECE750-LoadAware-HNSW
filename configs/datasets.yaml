@@ -1,0 +1,116 @@
+# Dataset registry. See IMPLEMENTATION_PLAN.md §5 (datasets) and §4 (artifact contract).
+# Ada-ef supports only metric cd (cosine distance) and ipd (inner-product distance).
+# gt_provided_valid: true  -> convert.py copies the provided GT into gt/neighbors.npy (gt_source=provided)
+#                    false -> ground_truth.py generates it on the GPU      (gt_source=generated)
+# Datasets are stored as .npy files (IMPLEMENTATION_PLAN.md §4.3); h5py only reads the HDF5 downloads (ann-benchmarks format).
+
+datasets:
+  - id: synthetic-small
+    role: tests_and_smoke_only
+    source_type: synthetic
+    metric: cd
+    dim: 64
+    n_base: 100000
+    n_query: 2000
+    query_source: synthetic_sample      # sampled base rows, removed from base (holdout)
+    gt_provided_valid: false
+    seed: 42
+    synthetic:
+      kind: blobs
+      n_clusters: 200
+      cluster_std: 0.05
+      center_box: [-1.0, 1.0]
+
+  - id: glove-100-angular
+    role: analysis  # hub-heavy word embeddings; worst static-ef recall in Ada-ef paper
+    source_type: ann_hdf5
+    urls: ["http://ann-benchmarks.com/glove-100-angular.hdf5"]
+    metric: cd
+    dim: 100
+    n_base: 1183514
+    n_query: 10000
+    query_source: provided
+    gt_provided_valid: true             # ann-benchmarks angular top-100
+    seed: 42
+
+  - id: deep-image-96-angular
+    role: analysis  # Ada-ef printed tail gap (P1 = 0.81); 10M scale
+    source_type: ann_hdf5
+    urls: ["http://ann-benchmarks.com/deep-image-96-angular.hdf5"]
+    metric: cd
+    dim: 96
+    n_base: 9990000
+    n_query: 10000
+    query_source: provided
+    gt_provided_valid: true
+    seed: 42
+
+  - id: dbpedia-openai-1m
+    role: analysis  # anisotropic OpenAI ada-002 embeddings, 1536-d; stand-in for MS MARCO V1
+    source_type: hf_parquet
+    hf_repo: KShivendu/dbpedia-entities-openai-1M
+    hf_tree_api: "https://huggingface.co/api/datasets/KShivendu/dbpedia-entities-openai-1M/tree/main/data"
+    hf_resolve_prefix: "https://huggingface.co/datasets/KShivendu/dbpedia-entities-openai-1M/resolve/main/"
+    column: openai
+    metric: cd
+    dim: 1536
+    n_base: 990000                      # 1,000,000 raw rows minus 10,000 holdout queries
+    n_query: 10000
+    query_source: holdout
+    gt_provided_valid: false
+    seed: 42
+
+  - id: cluster-zipf-100d
+    role: analysis  # cluster-size skew; "all methods struggle" in the Ada-ef paper
+    source_type: synthetic
+    metric: cd
+    dim: 100
+    n_base: 2000000                     # Ada-ef paper uses 10,000,000; raise if RAM allows
+    n_query: 10000
+    query_source: synthetic_sample
+    gt_provided_valid: false
+    seed: 42
+    synthetic:
+      kind: zipf_blobs                  # reproduces Ada-ef experiments_driver/data_prep.ipynb
+      n_clusters: 5000
+      cluster_std: 0.01
+      center_low: -0.1
+      center_high: 0.1
+      zipf_s: 1.0
+      zipf_base: 100
+
+  - id: coco-i2i-512-angular
+    role: analysis  # CLIP image queries from the same distribution as the base: the in-distribution control (small analogue of Ada-ef's Laion-I2I)
+    source_type: ann_hdf5
+    urls: ["https://github.com/fabiocarrara/str-encoders/releases/download/v0.1.3/coco-i2i-512-angular.hdf5"]
+    metric: cd
+    dim: 512
+    n_base: 113287
+    n_query: 10000
+    query_source: provided
+    gt_provided_valid: false            # provided top-100 disagrees with exact cosine on ~1% of neighbours; GT is generated on the GPU (VERIFICATION_NOTES Pass 7)
+    seed: 42
+
+  - id: coco-t2i-512-angular
+    role: analysis  # CLIP caption queries against the same kind of image base: a cross-modal shift (small analogue of Ada-ef's Laion-T2I)
+    source_type: ann_hdf5
+    urls: ["https://github.com/fabiocarrara/str-encoders/releases/download/v0.1.3/coco-t2i-512-angular.hdf5"]
+    metric: cd
+    dim: 512
+    n_base: 113287
+    n_query: 10000
+    query_source: provided
+    gt_provided_valid: false            # provided top-100 disagrees with exact cosine on ~0.6% of neighbours; GT is generated on the GPU (VERIFICATION_NOTES Pass 7)
+    seed: 42
+
+  - id: lastfm-64-dot
+    role: analysis  # matrix-factorization recommender retrieval (user vs item factors); item-popularity hubs. Stored as angular upstream, so no extra step here
+    source_type: ann_hdf5
+    urls: ["https://ann-benchmarks.com/lastfm-64-dot.hdf5"]
+    metric: cd
+    dim: 65
+    n_base: 292385
+    n_query: 50000
+    query_source: provided
+    gt_provided_valid: true             # ann-benchmarks-format top-100 (checked: no NaN, no zero-norm rows)
+    seed: 42

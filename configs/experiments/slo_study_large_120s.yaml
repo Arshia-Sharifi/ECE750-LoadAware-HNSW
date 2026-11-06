@@ -1,0 +1,96 @@
+# SLO study, 30 s runs, constant-rate arrivals: 108 runs for larger / remaining datasets.
+# Datasets: coco-t2i-512-angular, glove-100-angular, cluster-zipf-100d, deep-image-96-angular
+#   .venv/bin/python scripts/run_slo_study.py
+#
+# Question: when T_SLO is a fraction of stock Ada-ef's p95, how do the naive cut (laef_uniform) and the proportional
+# cut (laef_wf) of LA-ef compare with stock Ada-ef on large-scale / high-dimensional datasets?
+#
+# T_SLO = fraction x P. P is the dataset's saturation p95: saturation.s_p95_s in
+#   data/artifacts/<dataset>/profile/profile_C4.json (stock Ada-ef at mu_sat, 4 threads, 30 s profile run).
+#   P is a closed-loop service time. It has no queue wait in it.
+# ada_*  : stock Ada-ef at each load. It has no controller and ignores T_SLO, so one run per load is enough.
+#          fraction 1.0 only sets the attainment column, T_SLO = P.
+# laef_* : LA-ef at fractions 0.95, 0.9, 0.8 and 0.75 of P, naive and proportional cut, P-AIMD controller.
+#
+# Arrivals: constant rate (gap = 1/qps). rho = offered rate / mu_sat(4 threads), mu_sat from the same profile file.
+# Every section name starts with slo_study_large_120s/, so the outputs go to results/slo_study_large_120s/.
+
+ada_coco_t2i:
+  name: slo_study_large_120s/ada_coco_t2i
+  datasets: [coco-t2i-512-angular]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+laef_coco_t2i:
+  name: slo_study_large_120s/laef_coco_t2i
+  datasets: [coco-t2i-512-angular]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+ada_glove:
+  name: slo_study_large_120s/ada_glove
+  datasets: [glove-100-angular]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+laef_glove:
+  name: slo_study_large_120s/laef_glove
+  datasets: [glove-100-angular]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+ada_cluster_zipf:
+  name: slo_study_large_120s/ada_cluster_zipf
+  datasets: [cluster-zipf-100d]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+laef_cluster_zipf:
+  name: slo_study_large_120s/laef_cluster_zipf
+  datasets: [cluster-zipf-100d]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+ada_deep_image:
+  name: slo_study_large_120s/ada_deep_image
+  datasets: [deep-image-96-angular]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+laef_deep_image:
+  name: slo_study_large_120s/laef_deep_image
+  datasets: [deep-image-96-angular]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1

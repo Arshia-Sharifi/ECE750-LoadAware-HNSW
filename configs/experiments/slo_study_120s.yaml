@@ -1,0 +1,75 @@
+# SLO study, 120 s runs, constant-rate arrivals: 81 runs, about 3 hours.
+#   .venv/bin/python scripts/run_slo_study.py
+#
+# Question: when T_SLO is a fraction of stock Ada-ef's p95, how do the naive cut (laef_uniform) and the proportional
+# cut (laef_wf) of LA-ef compare with stock Ada-ef?
+#
+# T_SLO = fraction x P. P is the dataset's saturation p95: saturation.s_p95_s in
+#   data/artifacts/<dataset>/profile/profile_C4.json (stock Ada-ef at mu_sat, 4 threads, 120 s profile run).
+#   P is a closed-loop service time. It has no queue wait in it.
+# ada_*  : stock Ada-ef at each load. It has no controller and ignores T_SLO, so one run per load is enough.
+#          fraction 1.0 only sets the attainment column, T_SLO = P.
+# laef_* : LA-ef at fractions 0.95, 0.9, 0.8 and 0.75 of P, naive and proportional cut, P-AIMD controller.
+#
+# Arrivals: constant rate (gap = 1/qps). rho = offered rate / mu_sat(4 threads), mu_sat from the same profile file.
+# Every section name starts with slo_study_120s/, so the outputs go to results/slo_study_120s/.
+
+ada_synthetic:
+  name: slo_study_120s/ada_synthetic
+  datasets: [synthetic-small]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 120}
+  repeats: 1
+
+laef_synthetic:
+  name: slo_study_120s/laef_synthetic
+  datasets: [synthetic-small]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 120}
+  repeats: 1
+
+ada_lastfm:
+  name: slo_study_120s/ada_lastfm
+  datasets: [lastfm-64-dot]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 120}
+  repeats: 1
+
+laef_lastfm:
+  name: slo_study_120s/laef_lastfm
+  datasets: [lastfm-64-dot]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 120}
+  repeats: 1
+
+ada_coco:
+  name: slo_study_120s/ada_coco
+  datasets: [coco-i2i-512-angular]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 120}
+  repeats: 1
+
+laef_coco:
+  name: slo_study_120s/laef_coco
+  datasets: [coco-i2i-512-angular]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 120}
+  repeats: 1

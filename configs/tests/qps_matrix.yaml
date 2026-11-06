@@ -1,0 +1,13 @@
+# QPS x query-count test matrix. See IMPLEMENTATION_PLAN.md §13.3.
+# Real-dataset rows GTEST_SKIP() when data/artifacts/<id>/ or profile_C{threads}.json is missing.
+# rho = multiple of profiled saturation throughput mu_sat(C).
+- {dataset: fake,                  threads: 4, n_queries: 20000, rho: [0.3, 1.0, 1.5]}
+- {dataset: fake,                  threads: 4, n_queries: 20000, infeasible_step: [3.0, 0.3]}   # floor mode, no drops
+- {dataset: synthetic-small,       threads: 4, n_queries: 5000,  rho: [0.3, 1.0, 1.5]}
+- {dataset: glove-100-angular,     threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
+- {dataset: deep-image-96-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
+- {dataset: dbpedia-openai-1m,     threads: 4, n_queries: 3000,  rho: [0.5, 1.5]}
+- {dataset: cluster-zipf-100d,     threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
+- {dataset: coco-i2i-512-angular,  threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
+- {dataset: coco-t2i-512-angular,  threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
+- {dataset: lastfm-64-dot,         threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
