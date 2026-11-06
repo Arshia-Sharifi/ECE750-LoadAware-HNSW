@@ -16,7 +16,7 @@ import numpy as np
 
 from .download import raw_file
 from .registry import DatasetSpec
-from .sources import AnnHdf5Source, ParquetSource
+from .sources import AnnHdf5Source, FastTextVecSource, ParquetSource
 from .synthetic import generate_synthetic
 
 WRITE_CHUNK = 65_536
@@ -25,6 +25,9 @@ WRITE_CHUNK = 65_536
 def _base_source(spec: DatasetSpec, raw_root: Path):
     if spec.source_type == "ann_hdf5":
         return AnnHdf5Source(raw_file(spec, raw_root), "train")
+    if spec.source_type == "fasttext_vec":
+        max_rows = (spec.n_base + spec.n_query) if (spec.n_base and spec.query_source == "holdout") else None
+        return FastTextVecSource(raw_file(spec, raw_root), max_rows=max_rows)
     if spec.source_type == "hf_parquet":
         if not spec.column:
             raise ValueError(f"{spec.id}: hf_parquet needs a 'column' entry in datasets.yaml")
@@ -88,6 +91,53 @@ def convert_dataset(spec: DatasetSpec, raw_root: Path, local_dir: Path, out_dir:
         mats["train"][:] = base
         mats["test"] = np.lib.format.open_memmap(local_dir / "test.npy.tmp", mode="w+", dtype="<f4", shape=(n_query, d))
         mats["test"][:] = queries
+    elif spec.source_type == "hf_text_encode":
+        import torch
+        from datasets import load_dataset
+        from sentence_transformers import SentenceTransformer
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Loading encoder model {spec.encode_model} on {device}...", flush=True)
+        model = SentenceTransformer(spec.encode_model, device=device)
+        ds = load_dataset(spec.hf_repo, name=spec.hf_subset or None, split=spec.hf_split or "train")
+        col = spec.text_column or "text"
+
+        total_needed = spec.n_base + spec.n_query
+        texts = []
+        for row in ds:
+            val = row[col]
+            if isinstance(val, list):
+                val = " ".join(val)
+            if val and isinstance(val, str) and val.strip():
+                texts.append(val.strip())
+            if len(texts) >= total_needed:
+                break
+
+        n_query = spec.n_query
+        n_base = len(texts) - n_query
+        hold = np.sort(np.random.default_rng(spec.holdout_seed).choice(len(texts), size=n_query, replace=False))
+        is_hold = np.zeros(len(texts), dtype=bool)
+        is_hold[hold] = True
+
+        d = spec.dim
+        mats["train"] = np.lib.format.open_memmap(local_dir / "train.npy.tmp", mode="w+", dtype="<f4", shape=(n_base, d))
+        mats["test"] = np.lib.format.open_memmap(local_dir / "test.npy.tmp", mode="w+", dtype="<f4", shape=(n_query, d))
+
+        pb = pq = 0
+        batch_size = 512
+        for start in range(0, len(texts), batch_size):
+            batch_texts = texts[start:start + batch_size]
+            emb = model.encode(batch_texts, batch_size=batch_size, show_progress_bar=False, normalize_embeddings=(spec.metric == "cd"))
+            emb = np.asarray(emb, dtype=np.float32)
+            m = is_hold[start:start + len(batch_texts)]
+            b, q = emb[~m], emb[m]
+            if len(b):
+                mats["train"][pb:pb + len(b)] = b
+                pb += len(b)
+            if len(q):
+                mats["test"][pq:pq + len(q)] = q
+                pq += len(q)
+        holdout = hold.astype("<i8")
     else:
         src = _base_source(spec, raw_root)
         d = src.d

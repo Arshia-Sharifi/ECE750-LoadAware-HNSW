@@ -432,12 +432,6 @@ TEST(RealDatasetQps, DeepImageRho0p5_1p5_n10000) {
   GTEST_SKIP() << "real-dataset engine run not wired in this test yet";
 }
 
-TEST(RealDatasetQps, DbpediaOpenaiRho0p5_1p5_n3000) {
-  const std::string missing = missing_artifact("dbpedia-openai-1m");
-  if (!missing.empty()) GTEST_SKIP() << "artifacts not built: missing " << missing;
-  GTEST_SKIP() << "real-dataset engine run not wired in this test yet";
-}
-
 TEST(RealDatasetQps, ClusterZipfRho0p5_1p5_n10000) {
   const std::string missing = missing_artifact("cluster-zipf-100d");
   if (!missing.empty()) GTEST_SKIP() << "artifacts not built: missing " << missing;

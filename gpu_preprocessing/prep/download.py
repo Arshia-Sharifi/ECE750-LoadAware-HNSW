@@ -16,7 +16,10 @@ USER_AGENT = "laef-preprocess/1.1"
 
 
 def raw_file(spec: DatasetSpec, raw_root: Path) -> Path:
-    """Location of the single raw file of an ann_hdf5 dataset: raw_root/<id>/<id>.hdf5."""
+    """Location of the single raw file of a dataset."""
+    if spec.source_type == "fasttext_vec":
+        fname = Path(spec.urls[0]).name if spec.urls else f"{spec.id}.vec.zip"
+        return raw_root / spec.id / fname
     return raw_root / spec.id / f"{spec.id}.hdf5"
 
 
@@ -90,6 +93,12 @@ def download_raw(spec: DatasetSpec, raw_root: Path) -> Path:
             name = url.rsplit("/", 1)[-1]
             print(f"  [{i}/{len(urls)}] {name}", flush=True)
             download_file(url, ds_dir / name)
-    elif spec.source_type != "synthetic":
+    elif spec.source_type == "fasttext_vec":
+        if len(spec.urls) != 1:
+            raise ValueError(f"{spec.id}: fasttext_vec needs exactly one URL in 'urls'")
+        download_file(spec.urls[0], raw_file(spec, raw_root))
+    elif spec.source_type in ("synthetic", "hf_text_encode"):
+        pass
+    else:
         raise ValueError(f"{spec.id}: unknown source_type {spec.source_type!r}")
     return ds_dir

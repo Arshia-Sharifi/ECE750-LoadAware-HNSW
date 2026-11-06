@@ -10,7 +10,7 @@ Status: findings recorded, fixes in progress. Nothing has been compiled or run (
 - F3 `Hdf5Source.take_by_index` with unsorted indices: h5py rejects non-increasing index lists, and calibration `base_sample` draws unsorted indices. FIX.
 - F4 `synthetic.generate_synthetic_small` allocates a (100k x 101k) float32 array (~40 GB) and ignores `datasets.yaml` (blobs, 200 clusters, std 0.05, box [-1, 1]). FIX.
 - F5 `registry.py` ignores the yaml keys `column`, `hf_tree_api`, `hf_resolve_prefix`, `synthetic`. `download.py` lists `.../tree/main/train`, but the shards live under `data/`. FIX.
-- F6 `convert.py`: holdout split copies the full base (`base[mask]`), so dbpedia peaks near 12 GB against Colab's ~12.7 GB RAM. FIX: stream chunks into the h5 file.
+- F6 `convert.py`: holdout split copies the full base (`base[mask]`), so large datasets peak near 12 GB against Colab's ~12.7 GB RAM. FIX: stream chunks into the h5 file.
 - F7 Wrong call signatures: `write_samplings(path, q, gt)` and `write_estimator(path, metric, mean, cov)` take the path first. `ground_truth.recall_at_k` does not exist (use `agreement`). `np` is not imported at module scope, so `step_stats` raises NameError. FIX.
 - F8 `run_preprocess`: after the download step `raw_dir` is `raw/<id>`, and convert appends `<id>` again. FIX.
 - F9 `run_preprocess`: `dataset.h5` is written under `--out` (Google Drive), but plan §7.1 says it stays in `data_root/artifacts`. FIX.

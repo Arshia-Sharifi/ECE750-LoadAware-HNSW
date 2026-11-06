@@ -435,14 +435,13 @@ The datasets, query matrices and ground truth are stored as `.npy` files with JS
 
 ## 5. Datasets (kept small on purpose)
 
-Seven analysis datasets cover the behaviours that matter for LA-ef: a hub-heavy word-embedding set, image descriptors where Ada-ef's tail loss is printed in the paper, an anisotropic LLM embedding set, synthetic cluster-size skew, CLIP image and caption queries against one image base (COCO I2I and T2I), and a recommender workload (Last.fm). Three have provided ground truth (glove, deep-image, Last.fm) and five get GT generated on the GPU (dbpedia, cluster-zipf, synthetic-small and the two COCO sets). The COCO provided files are not used: they disagree with exact cosine search on about 1% of neighbours (VERIFICATION_NOTES, Pass 7). Both GT paths still get exercised.
+Six analysis datasets cover the behaviours that matter for LA-ef: a hub-heavy word-embedding set, image descriptors where Ada-ef's tail loss is printed in the paper, synthetic cluster-size skew, CLIP image and caption queries against one image base (COCO I2I and T2I), and a recommender workload (Last.fm). Three have provided ground truth (glove, deep-image, Last.fm) and four get GT generated on the GPU (cluster-zipf, synthetic-small and the two COCO sets). The COCO provided files are not used: they disagree with exact cosine search on about 1% of neighbours (VERIFICATION_NOTES, Pass 7). Both GT paths still get exercised.
 
 | id | Role in the analysis | N × d | Metric | GT | Source / download | Disk / RAM (approx.) |
 |---|---|---|---|---|---|---|
 | `synthetic-small` | **Tests and smoke runs only** | 100k × 64 (Gaussian blobs) | cd | generated on the GPU (Colab) | `prep/synthetic.py` (seeded). The first copy was made on the CPU and kept as it is | 25 MB / <1 GB |
 | `glove-100-angular` | Hub-heavy; worst static-ef recall in the Ada-ef paper; fast iteration | 1.18M × 100 | cd | **provided** (top-100) | <http://ann-benchmarks.com/glove-100-angular.hdf5> (463 MB) | 0.5 GB / ~2 GB |
 | `deep-image-96-angular` | Ada-ef's printed tail gap (P1 = 0.81); 10M scale for memory contention | 9.99M × 96 | cd | **provided** (top-100) | <http://ann-benchmarks.com/deep-image-96-angular.hdf5> (3.6 GB) | 3.7 GB / ~10 GB at build, ~6 GB serving |
-| `dbpedia-openai-1m` | Anisotropic ada-002 LLM embeddings, 1536-d (heavy dc, long service times). Stands in for Ada-ef's MS MARCO V1 (same model, 108 GB download) | 1M × 1536 (10k held out as queries) | cd | **generated** | HF `KShivendu/dbpedia-entities-openai-1M`, 26 parquet shards, column `openai`: <https://huggingface.co/datasets/KShivendu/dbpedia-entities-openai-1M/tree/main/data> | 9.5 GB / ~13 GB |
 | `coco-i2i-512-angular` | CLIP image queries against an image base: the in-distribution control, and the small analogue of Ada-ef's Laion-I2I | 113k x 512 | cd | **generated** (exact, GPU; provided top-100 kept for reference only, Pass 7) | <https://github.com/fabiocarrara/str-encoders/releases/download/v0.1.3/coco-i2i-512-angular.hdf5> (136 MB) | 0.3 GB / <1 GB |
 | `coco-t2i-512-angular` | CLIP caption queries against the same kind of image base: a cross-modal shift, and the small analogue of Ada-ef's Laion-T2I | 113k x 512 | cd | **generated** (exact, GPU; provided top-100 kept for reference only, Pass 7) | same release, `coco-t2i-512-angular.hdf5` (136 MB) | 0.3 GB / <1 GB |
 | `lastfm-64-dot` | Matrix-factorization recommender retrieval with item-popularity hubs. Stored as angular upstream (the inner-product to cosine step is done there), so no extra step is needed here | 292k x 65 | cd | **provided** (top-100) | <https://ann-benchmarks.com/lastfm-64-dot.hdf5> (135 MB) | 0.1 GB / <1 GB |
@@ -540,7 +539,7 @@ def exact_knn(queries: np.ndarray, base: VectorSource, k: int, metric: str,
 2. Mount Drive
 3. Copy or clone `gpu_preprocessing/` and `configs/datasets.yaml`
 4. `pip install -r requirements.txt`
-5. A loop over `["glove-100-angular", "deep-image-96-angular", "dbpedia-openai-1m", "cluster-zipf-100d", "coco-i2i-512-angular", "coco-t2i-512-angular", "lastfm-64-dot"]` calling `run_preprocess.py ... --data-root /content/data --out /content/drive/MyDrive/laef_artifacts`
+5. A loop over `["glove-100-angular", "deep-image-96-angular", "cluster-zipf-100d", "coco-i2i-512-angular", "coco-t2i-512-angular", "lastfm-64-dot"]` calling `run_preprocess.py ... --data-root /content/data --out /content/drive/MyDrive/laef_artifacts`
 6. Print each manifest
 
 Note in the notebook that Colab local disk is about 100 GB and RAM about 12.7 GB. Everything streams, so the only per-dataset requirement is disk space for the raw download.
@@ -972,7 +971,6 @@ The cases are parameterized from `qps_matrix.yaml`. The fake-backend cases alway
 - {dataset: synthetic-small,   threads: 4, n_queries: 5000,  rho: [0.3, 1.0, 1.5]}
 - {dataset: glove-100-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
 - {dataset: deep-image-96-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
-- {dataset: dbpedia-openai-1m, threads: 4, n_queries: 3000,  rho: [0.5, 1.5]}
 - {dataset: cluster-zipf-100d, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
 - {dataset: coco-i2i-512-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
 - {dataset: coco-t2i-512-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
@@ -1001,9 +999,9 @@ Defaults: k = 10, target recall 0.95, C = `--threads` (record the core count of 
 |---|---|---|
 | **E0 Calibration** | Does Ada-ef hit its target at idle? What do the price lists look like? | 4 datasets; `laef_calibrate` outputs only. Plots of r̄_g(e), c̄_g(e), ℓ distribution, p_g. |
 | **E1 Load sweep** | How do recall and latency change as load grows? | 7 datasets × {static_ef, ada_ef, laef_uniform, laef_wf} × Poisson ρ ∈ {0.5, 0.8, 1.0, 1.2, 1.5, 2.0} × m ∈ {3, 5} |
-| **E2 Step burst** | Transient behaviour (MF §8) | glove + dbpedia × {ada_ef, laef_uniform, laef_wf} × step 0.3 → 1.5 → 0.3 ρ (5 s / 5 s / 5 s), m = 5 |
+| **E2 Step burst** | Transient behaviour (MF §8) | glove + deep × {ada_ef, laef_uniform, laef_wf} × step 0.3 → 1.5 → 0.3 ρ (5 s / 5 s / 5 s), m = 5 |
 | **E3 Bursty traffic** | Realistic bursts | glove + deep × same policies × MMPP-2 (ρ_lo 0.4, ρ_hi 1.6, mean 1 s / 0.3 s) |
-| **E4 Ablations** | Which parts matter? | glove (+ dbpedia for the controller axis), ρ ∈ {1.2, 2.0}: controller {p_aimd, fixed_aimd, static_capacity}; guard on/off; floor mode on/off; window n ∈ {250, 500, 1000}; growth ∈ {1.01, 1.02, 1.05}; ladder ratio {√2, 2} |
+| **E4 Ablations** | Which parts matter? | glove, ρ ∈ {1.2, 2.0}: controller {p_aimd, fixed_aimd, static_capacity}; guard on/off; floor mode on/off; window n ∈ {250, 500, 1000}; growth ∈ {1.01, 1.02, 1.05}; ladder ratio {√2, 2} |
 | **E5 Threads** | Hardware contention | glove + deep × laef_wf × C ∈ {1, 2, 4, …, cores}, ρ = 1.2. Reports u(C) and B_max(C). |
 
 ### 14.2 Metrics (computed in `summary.json`; definitions in `analysis/laef_analysis/metrics.py`)
@@ -1073,7 +1071,7 @@ The notebooks `01`–`04` (✅ written) are **self-contained**: each one reads t
 |---|---|
 | Probe cost is large relative to the floor (≈1025 dc of the probe sits inside c̄(k)) | Expected and correct: B_min and S_floor include it. Report `probe_ndis / ndis` in E0. |
 | The guard's one-step factor assumes S_p95 ∝ B, but water-filling protects hard queries (BB §2.2 caveat) | Safe because of the B_min clamp and the bucket check. Measured in E4 (guard on/off × allocator). A possible refinement is to use the measured ∂S_p95/∂B. |
-| p95 is noisy on slow datasets (dbpedia: few completions per 20 ms) | `window.min_samples`; E4 sweeps `window.n`. |
+| p95 is noisy on slow queries (few completions per 20 ms) | `window.min_samples`; E4 sweeps `window.n`. |
 | WSL2 timing jitter | Use `--pin-cores`; report the machine and kernel; repeat 3×; prefer native Linux for the final numbers if one is available. |
 | `EfAdapter` construction calls `setEf` (not thread-safe) | Calibration builds the adapter single-threaded. Serving never calls `setEf` (§8.2, change 1). |
 | ann-benchmarks GT could disagree with our cosine definition | `--verify-provided` (P1.6) fails loudly if it does. |

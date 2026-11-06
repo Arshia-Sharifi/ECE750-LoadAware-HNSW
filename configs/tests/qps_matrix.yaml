@@ -6,7 +6,6 @@
 - {dataset: synthetic-small,       threads: 4, n_queries: 5000,  rho: [0.3, 1.0, 1.5]}
 - {dataset: glove-100-angular,     threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
 - {dataset: deep-image-96-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
-- {dataset: dbpedia-openai-1m,     threads: 4, n_queries: 3000,  rho: [0.5, 1.5]}
 - {dataset: cluster-zipf-100d,     threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
 - {dataset: coco-i2i-512-angular,  threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
 - {dataset: coco-t2i-512-angular,  threads: 4, n_queries: 10000, rho: [0.5, 1.5]}

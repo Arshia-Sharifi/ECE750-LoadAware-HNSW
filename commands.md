@@ -13,7 +13,6 @@ Run every command from the `Implementation/` folder on WSL, in the order below. 
 | glove-100-angular | yes | **missing** | none |
 | cluster-zipf-100d | yes | **missing** | none |
 | deep-image-96-angular | yes | **missing** | none |
-| dbpedia-openai-1m | yes | **missing** | none |
 
 - No Colab run and no `scripts/prepare_dataset.sh` are needed: every dataset already has its `.npy` files and Colab outputs.
 - No setup script is needed: `build/` is already configured with the Ada-ef backend (Eigen and Boost from `/home/f1coder/laef-deps`), and the submodule and `.venv` exist.
@@ -26,12 +25,12 @@ cmake --build build -j 12
 ctest --test-dir build -R "parity|price_list" --output-on-failure    # §1A.8 items 2-4
 ```
 
-## 2. Build the five missing indexes
+## 2. Build the four missing indexes
 
-Largest last. deep-image needs ~10 GB RAM and takes the longest; dbpedia needs ~13 GB RAM.
+Largest last. deep-image needs ~10 GB RAM and takes the longest.
 
 ```bash
-for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular dbpedia-openai-1m; do
+for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular; do
   build/bin/laef_build_index --dataset-dir "data/artifacts/$ID" --M 16 --efc 500 --threads "$(nproc)"
 done
 ```
@@ -52,7 +51,7 @@ Writes `tables/L{L}/` for every probe length and `tables/probe_menu.json`. It ta
 
 ```bash
 for ID in synthetic-small lastfm-64-dot coco-i2i-512-angular coco-t2i-512-angular \
-          glove-100-angular cluster-zipf-100d deep-image-96-angular dbpedia-openai-1m; do
+          glove-100-angular cluster-zipf-100d deep-image-96-angular; do
   build/bin/laef_calibrate --dataset-dir "data/artifacts/$ID" --M 16 --efc 500 \
     --probe-lengths 1025,512,256,128 --threads "$(nproc)"
 done
@@ -87,7 +86,7 @@ The SLO study derives T_SLO from `saturation.s_p95_s`, so keep the 120 s saturat
 
 ```bash
 for ID in synthetic-small lastfm-64-dot coco-i2i-512-angular coco-t2i-512-angular \
-          glove-100-angular cluster-zipf-100d deep-image-96-angular dbpedia-openai-1m; do
+          glove-100-angular cluster-zipf-100d deep-image-96-angular; do
   build/bin/laef_profile --dataset-dir "data/artifacts/$ID" --M 16 --efc 500 --threads 4 --sat-seconds 120
 done
 ```
@@ -240,10 +239,10 @@ ctest --test-dir build -R "parity|price_list" --output-on-failure
 
 ### 9.5 Build Indexes for Remaining Datasets
 
-The 3 datasets already indexed (`coco-i2i-512-angular`, `lastfm-64-dot`, `synthetic-small`) are transferred ready to use. Build the indexes for the remaining 5 datasets (ordered smallest to largest; note that `deep-image` requires ~10 GB RAM, `dbpedia` requires ~13 GB RAM):
+The 3 datasets already indexed (`coco-i2i-512-angular`, `lastfm-64-dot`, `synthetic-small`) are transferred ready to use. Build the indexes for the remaining 4 datasets (ordered smallest to largest; note that `deep-image` requires ~10 GB RAM):
 
 ```bash
-for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular dbpedia-openai-1m; do
+for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular; do
   echo "=== Building Index: $ID ==="
   build/bin/laef_build_index --dataset-dir "data/artifacts/$ID" --M 16 --efc 500 --threads "$(nproc)"
 done
@@ -253,10 +252,10 @@ done
 
 ### 9.6 Calibrate & Generate Water-Filling Tables
 
-Generate per-probe-length calibration tables (`tables/L{L}/` and `tables/probe_menu.json`) for the 5 newly indexed datasets:
+Generate per-probe-length calibration tables (`tables/L{L}/` and `tables/probe_menu.json`) for the 4 newly indexed datasets:
 
 ```bash
-for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular dbpedia-openai-1m; do
+for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular; do
   echo "=== Calibrating: $ID ==="
   build/bin/laef_calibrate --dataset-dir "data/artifacts/$ID" --M 16 --efc 500 \
     --probe-lengths 1025,512,256,128 --threads "$(nproc)"
@@ -288,7 +287,7 @@ EOF
 Measure baseline saturation and idle latency at 4 threads (120 s saturation run to establish baseline $P_{95}$ latency and capacity $\mu_{sat}$):
 
 ```bash
-for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular dbpedia-openai-1m; do
+for ID in coco-t2i-512-angular glove-100-angular cluster-zipf-100d deep-image-96-angular; do
   echo "=== Profiling: $ID ==="
   build/bin/laef_profile --dataset-dir "data/artifacts/$ID" --M 16 --efc 500 --threads 4 --sat-seconds 30
 done

@@ -94,3 +94,63 @@ laef_deep_image:
   workloads:
     - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
   repeats: 1
+
+ada_quora:
+  name: slo_study_large_120s/ada_quora
+  datasets: [quora-384-angular]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+laef_quora:
+  name: slo_study_large_120s/laef_quora
+  datasets: [quora-384-angular]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+ada_bge_wiki:
+  name: slo_study_large_120s/ada_bge_wiki
+  datasets: [bge-wiki-768-angular]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+laef_bge_wiki:
+  name: slo_study_large_120s/laef_bge_wiki
+  datasets: [bge-wiki-768-angular]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+ada_crawl:
+  name: slo_study_large_120s/ada_crawl
+  datasets: [crawl-300-angular]
+  threads: [4]
+  policies: [ada_ef]
+  slo: {fraction: [1.0]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1
+
+laef_crawl:
+  name: slo_study_large_120s/laef_crawl
+  datasets: [crawl-300-angular]
+  threads: [4]
+  policies: [laef_uniform, laef_wf]
+  slo: {fraction: [0.95, 0.9, 0.8, 0.75]}
+  workloads:
+    - {profile: constant, rho: [0.5, 1.0, 1.5], duration_s: 30}
+  repeats: 1

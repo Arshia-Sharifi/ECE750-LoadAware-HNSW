@@ -8,4 +8,6 @@ pyyaml>=6
 requests>=2.31
 tqdm>=4.66
 scikit-learn>=1.4   # make_blobs for synthetic datasets
+sentence-transformers>=2.5
+datasets>=2.18
 pytest>=8

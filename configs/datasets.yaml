@@ -45,21 +45,6 @@ datasets:
     gt_provided_valid: true
     seed: 42
 
-  - id: dbpedia-openai-1m
-    role: analysis  # anisotropic OpenAI ada-002 embeddings, 1536-d; stand-in for MS MARCO V1
-    source_type: hf_parquet
-    hf_repo: KShivendu/dbpedia-entities-openai-1M
-    hf_tree_api: "https://huggingface.co/api/datasets/KShivendu/dbpedia-entities-openai-1M/tree/main/data"
-    hf_resolve_prefix: "https://huggingface.co/datasets/KShivendu/dbpedia-entities-openai-1M/resolve/main/"
-    column: openai
-    metric: cd
-    dim: 1536
-    n_base: 990000                      # 1,000,000 raw rows minus 10,000 holdout queries
-    n_query: 10000
-    query_source: holdout
-    gt_provided_valid: false
-    seed: 42
-
   - id: cluster-zipf-100d
     role: analysis  # cluster-size skew; "all methods struggle" in the Ada-ef paper
     source_type: synthetic
@@ -113,4 +98,47 @@ datasets:
     n_query: 50000
     query_source: provided
     gt_provided_valid: true             # ann-benchmarks-format top-100 (checked: no NaN, no zero-norm rows)
+    seed: 42
+
+  - id: quora-384-angular
+    role: analysis  # duplicate question search; modern dense RAG retrieval with all-MiniLM-L6-v2 (384-d)
+    source_type: hf_text_encode
+    hf_repo: sentence-transformers/quora-duplicates
+    hf_split: train
+    text_column: questions
+    encode_model: sentence-transformers/all-MiniLM-L6-v2
+    metric: cd
+    dim: 384
+    n_base: 514000
+    n_query: 10000
+    query_source: holdout
+    gt_provided_valid: false
+    seed: 42
+
+  - id: bge-wiki-768-angular
+    role: analysis  # Wikipedia passage retrieval with BGE-base-en-v1.5 (768-d); compute-intensive LLM embeddings
+    source_type: hf_text_encode
+    hf_repo: wikimedia/wikipedia
+    hf_subset: 20231101.en
+    hf_split: train
+    text_column: text
+    encode_model: BAAI/bge-base-en-v1.5
+    metric: cd
+    dim: 768
+    n_base: 1000000
+    n_query: 10000
+    query_source: holdout
+    gt_provided_valid: false
+    seed: 42
+
+  - id: crawl-300-angular
+    role: analysis  # FastText Common Crawl subword embeddings (300-d); dense graph with extreme hubness
+    source_type: fasttext_vec
+    urls: ["https://dl.fbaipublicfiles.com/fasttext/vectors-english/crawl-300d-2M.vec.zip"]
+    metric: cd
+    dim: 300
+    n_base: 1990000
+    n_query: 10000
+    query_source: holdout
+    gt_provided_valid: false
     seed: 42

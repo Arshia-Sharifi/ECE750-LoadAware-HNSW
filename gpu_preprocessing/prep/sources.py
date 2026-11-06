@@ -2,7 +2,7 @@
 
 NpySource reads our canonical matrices (train.npy, test.npy) through a memory map.
 AnnHdf5Source reads the raw ann-benchmarks files, which are HDF5 upstream; it is used only by the
-convert step. ParquetSource reads the raw dbpedia shards. Consumers read through iter_chunks
+convert step. ParquetSource reads raw parquet shards. Consumers read through iter_chunks
 (streaming) or take_by_index (small random samples). Row ids are the canonical base ids (§4.2).
 """
 from __future__ import annotations
@@ -101,7 +101,7 @@ class AnnHdf5Source:
 
 
 class ParquetSource:
-    """A list-valued embedding column spread over parquet files (e.g. dbpedia-openai-1m).
+    """A list-valued embedding column spread over parquet files.
 
     Batches go through pyarrow's flatten/to_numpy, so no per-element Python objects are created.
     """
@@ -134,6 +134,91 @@ class ParquetSource:
                 block = self._to_matrix(batch.column(0))
                 yield start, block
                 start += len(block)
+
+    def take_by_index(self, idx) -> np.ndarray:
+        idx = _check_indices(idx, self.n)
+        if idx.size == 0:
+            return np.empty((0, self.d), dtype=np.float32)
+        uniq = np.unique(idx)
+        pieces = []
+        for start, block in self.iter_chunks(65_536):
+            lo, hi = np.searchsorted(uniq, [start, start + len(block)])
+            if hi > lo:
+                pieces.append(block[uniq[lo:hi] - start])
+        rows_sorted = np.concatenate(pieces, axis=0)
+        return rows_sorted[np.searchsorted(uniq, idx)]
+
+
+class FastTextVecSource:
+    """Reads a FastText .vec or .vec.zip file chunk by chunk."""
+
+    def __init__(self, path: Path | str, max_rows: int | None = None):
+        import zipfile
+        self.path = Path(path)
+        if not self.path.exists():
+            raise FileNotFoundError(f"FastText vector file not found: {self.path}")
+        self.max_rows = max_rows
+        self._is_zip = self.path.suffix == ".zip"
+        n, d = self._read_header()
+        if max_rows is not None and max_rows < n:
+            n = max_rows
+        self.n = n
+        self.d = d
+
+    def _read_header(self) -> tuple[int, int]:
+        import zipfile
+        if self._is_zip:
+            with zipfile.ZipFile(self.path, "r") as z:
+                names = [n for n in z.namelist() if n.endswith(".vec")]
+                if not names:
+                    raise ValueError(f"no .vec file in {self.path}")
+                with z.open(names[0], "r") as f:
+                    first = f.readline().decode("utf-8").strip()
+        else:
+            with open(self.path, "r", encoding="utf-8") as f:
+                first = f.readline().strip()
+        parts = first.split()
+        return int(parts[0]), int(parts[1])
+
+    def _open_stream(self):
+        import zipfile
+        if self._is_zip:
+            z = zipfile.ZipFile(self.path, "r")
+            names = [n for n in z.namelist() if n.endswith(".vec")]
+            f = z.open(names[0], "r")
+            f.readline()  # skip header
+            return z, f
+        else:
+            f = open(self.path, "rb")
+            f.readline()  # skip header
+            return None, f
+
+    def iter_chunks(self, chunk_rows: int) -> Iterator[tuple[int, np.ndarray]]:
+        z, stream = self._open_stream()
+        try:
+            curr_start = 0
+            chunk = []
+            for line in stream:
+                if self.max_rows and curr_start + len(chunk) >= self.max_rows:
+                    break
+                space_idx = line.find(b" ")
+                if space_idx < 0:
+                    continue
+                v = np.fromstring(line[space_idx + 1:], dtype=np.float32, sep=" ")
+                if len(v) == self.d:
+                    chunk.append(v)
+                if len(chunk) == chunk_rows:
+                    block = np.vstack(chunk)
+                    yield curr_start, block
+                    curr_start += len(chunk)
+                    chunk = []
+            if chunk:
+                block = np.vstack(chunk)
+                yield curr_start, block
+        finally:
+            stream.close()
+            if z is not None:
+                z.close()
 
     def take_by_index(self, idx) -> np.ndarray:
         idx = _check_indices(idx, self.n)

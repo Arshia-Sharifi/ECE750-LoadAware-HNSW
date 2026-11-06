@@ -59,3 +59,46 @@ def test_write_cpp_fixtures():
     cov = np.array([[1.0, 0.1, 0.2], [0.1, 2.0, 0.3], [0.2, 0.3, 3.0]], dtype=np.float32)
     write_estimator(FIXTURES / "estimator_cd_d3.bin", "cd", mean, cov)
     assert (FIXTURES / "samplings_3x4_k2.bin").exists() and (FIXTURES / "estimator_cd_d3.bin").exists()
+
+
+def test_registry_has_new_datasets():
+    from prep.registry import load_registry
+    reg = load_registry()
+    for ds in ["quora-384-angular", "bge-wiki-768-angular", "crawl-300-angular"]:
+        assert ds in reg
+        spec = reg[ds]
+        assert spec.metric == "cd"
+        assert spec.dim in (384, 768, 300)
+
+
+def test_fasttext_vec_source_roundtrip(tmp_path):
+    from prep.sources import FastTextVecSource
+    import zipfile
+
+    vec_path = tmp_path / "test.vec"
+    lines = [
+        "3 4\n",
+        "word1 0.1 0.2 0.3 0.4\n",
+        "word2 1.1 1.2 1.3 1.4\n",
+        "word3 2.1 2.2 2.3 2.4\n",
+    ]
+    vec_path.write_text("".join(lines), encoding="utf-8")
+
+    src = FastTextVecSource(vec_path)
+    assert src.n == 3 and src.d == 4
+    chunks = list(src.iter_chunks(2))
+    assert len(chunks) == 2
+    assert chunks[0][1].shape == (2, 4)
+    assert chunks[1][1].shape == (1, 4)
+    np.testing.assert_allclose(chunks[0][1][0], [0.1, 0.2, 0.3, 0.4], atol=1e-5)
+
+    # Test zip support
+    zip_path = tmp_path / "test.vec.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.write(vec_path, arcname="test.vec")
+
+    src_zip = FastTextVecSource(zip_path)
+    assert src_zip.n == 3 and src_zip.d == 4
+    sampled = src_zip.take_by_index([0, 2])
+    assert sampled.shape == (2, 4)
+    np.testing.assert_allclose(sampled[1], [2.1, 2.2, 2.3, 2.4], atol=1e-5)

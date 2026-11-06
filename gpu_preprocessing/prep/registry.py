@@ -22,11 +22,15 @@ class DatasetSpec:
     query_source: str = "provided"       # provided | holdout | synthetic_sample
     gt_provided_valid: bool = False
     seed: int = 42
-    urls: list[str] = field(default_factory=list)       # ann_hdf5: one URL
-    hf_repo: str = ""                    # hf_parquet
+    urls: list[str] = field(default_factory=list)       # ann_hdf5 / fasttext_vec: download URL(s)
+    hf_repo: str = ""                    # hf_parquet / hf_text_encode
+    hf_subset: str = ""                  # hf_text_encode config/subset
+    hf_split: str = "train"              # hf_text_encode split
     hf_tree_api: str = ""                # hf_parquet: JSON listing of the shards
     hf_resolve_prefix: str = ""          # hf_parquet: prefix + shard path = download URL
     column: str = ""                     # hf_parquet: list-valued embedding column
+    text_column: str = "text"            # hf_text_encode: text column to encode
+    encode_model: str = ""               # hf_text_encode: sentence-transformers model
     synthetic: dict[str, Any] = field(default_factory=dict)
     holdout_seed: int | None = None      # defaults to seed
 
@@ -60,9 +64,13 @@ def load_registry(path: str | Path | None = None) -> dict[str, DatasetSpec]:
             seed=int(e.get("seed", 42)),
             urls=list(e.get("urls") or []),
             hf_repo=e.get("hf_repo", ""),
+            hf_subset=e.get("hf_subset", ""),
+            hf_split=e.get("hf_split", "train"),
             hf_tree_api=e.get("hf_tree_api", ""),
             hf_resolve_prefix=e.get("hf_resolve_prefix", ""),
             column=e.get("column", ""),
+            text_column=e.get("text_column", "text"),
+            encode_model=e.get("encode_model", ""),
             synthetic=dict(e.get("synthetic") or {}),
             holdout_seed=e.get("holdout_seed"),
         )
