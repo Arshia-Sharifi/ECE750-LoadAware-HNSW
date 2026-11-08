@@ -100,14 +100,7 @@ def workload_variants(wl: dict) -> list[tuple[dict, str, float]]:
             cfg = {"profile": profile, "rho": float(r), **{k: wl[k] for k in passthrough}}
             out.append((cfg, profile, float(r)))
         return out
-    if profile == "step":
-        phases = [{"rho": float(p["rho"]), "duration_s": float(p["duration_s"])} for p in wl["phases"]]
-        return [({"profile": "step", "phases": phases}, "step", max(p["rho"] for p in phases))]
-    if profile == "mmpp2":
-        cfg = {"profile": "mmpp2", **{k: float(wl[k]) for k in ("rho_lo", "rho_hi", "mean_lo_s", "mean_hi_s")},
-               **{k: wl[k] for k in passthrough}}
-        return [(cfg, "mmpp2", float(wl["rho_hi"]))]
-    raise ValueError(f"unknown workload profile {profile!r}")
+    raise ValueError(f"unknown workload profile {profile!r} (poisson | constant)")
 
 
 def build_runs(section: str, sec: dict) -> list[Run]:
@@ -185,12 +178,6 @@ def to_absolute_rates(config: dict[str, Any], mu_sat_qps: float) -> dict[str, An
     wl = cfg.get("workload", {})
     if "rho" in wl:
         wl["qps"] = float(wl.pop("rho")) * mu_sat_qps
-    for ph in wl.get("phases", []):
-        if "rho" in ph:
-            ph["qps"] = float(ph.pop("rho")) * mu_sat_qps
-    for end in ("lo", "hi"):
-        if f"rho_{end}" in wl:
-            wl[f"qps_{end}"] = float(wl.pop(f"rho_{end}")) * mu_sat_qps
     return cfg
 
 

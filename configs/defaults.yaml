@@ -50,7 +50,7 @@ telemetry:
 controller:
   type: p_aimd                  # p_aimd | fixed_aimd | static_capacity | none
   cut_floor: 0.5
-  headroom: 0.85
+  headroom: 0.95
   growth: 1.02
   guard: true
   fixed_cut: 0.9                # fixed_aimd only
@@ -68,7 +68,7 @@ floor_mode:
   enabled: true                 # queries are NEVER dropped; false only for ablation
 
 workload:
-  profile: poisson              # arrival process: poisson (exponential gaps at rate qps) | constant (gap = 1/qps) | step | mmpp2 | trace
+  profile: constant             # arrival process: constant (gap = 1/qps) | poisson (exponential gaps at rate qps)
   qps: null                     # REQUIRED: arrival rate lambda in queries/s (absolute; experiments set it from rho x mu_sat(C))
   n_queries: 20000
   duration_s: null

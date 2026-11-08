@@ -39,7 +39,7 @@ struct EngineInputs {
   double t_slo_s = 0;                      // T_SLO [s]
   double u_s_per_dc = 0;                   // profile: unit cost at `threads` (initial u, and B_max = C / u)
   double mean_service_s = 0;               // profile: initial E[S]
-  double s_p95_s = 0;                      // profile: idle S_p95 (initial S for the bucket when t_base = tail)
+  double s_p95_s = 0;                      // profile: saturation S_p95 at `threads` (the S in the initial t_base = T_SLO - S when t_base = tail; later windows use their own S_p95)
   int threads = 1;                         // C workers
   bool pin_cores = false;                  // generator core 0, controller core 1, workers 2..C+1
 };

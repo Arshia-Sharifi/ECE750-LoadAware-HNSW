@@ -23,7 +23,7 @@ struct ProbeOption {
   double ef_pref_mean = 0;                // mean Ada-ef ef, calibration preference pass
 };
 
-// Options in strictly descending probe length. Option 0 is the full probe: stock Ada-ef and light load use it.
+// Options in strictly descending probe length. Option 0 is the full probe.
 class ProbeMenu {
  public:
   ProbeMenu() = default;  // empty until assigned; every user must check size() first
@@ -49,13 +49,11 @@ class ProbeMenu {
   }
 
   // Stage 1 (§1A.5). Index of the probe a query runs with, given the water budget w_target [dc per arrival].
-  //  - light load (w_target >= full-probe nominal demand): the full probe, i.e. stock Ada-ef.
-  //  - otherwise: among the options whose expected work fits (within 0.1%), the one with the highest expected recall.
+  //  - among the options whose expected work fits (within 0.1%), the one with the highest expected recall.
   //    Options are scanned from the longest probe, so a tie (difference below 1e-4) keeps the longer one.
   //  - nothing fits: the shortest probe. The bucket check and floor mode handle the rest.
   size_t choose(double w_target, CutKind kind) const {
     if (opts_.empty()) throw std::logic_error("ProbeMenu::choose on an empty menu");
-    if (w_target >= opts_[0].price_list.model_nominal_work()) return 0;
     size_t best = opts_.size();
     double best_recall = 0;
     for (size_t j = 0; j < opts_.size(); ++j) {

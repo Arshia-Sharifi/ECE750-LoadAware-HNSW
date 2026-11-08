@@ -2,9 +2,8 @@
 // Fake-backend cases always run. Real-dataset cases skip unless their artifacts exist (see the end of the file).
 //
 // Parameters and why they differ from the YAML:
-//  * Case A mirrors the first YAML row (threads 4, n_queries 20000, rho {0.3, 1.0, 1.5}). Case B mirrors the second
-//    row (threads 4, n_queries 20000, infeasible_step [3.0, 0.3]). The YAML is not parsed in C++, so the values are
-//    repeated as constants below.
+//  * Case A mirrors the first YAML row (threads 4, n_queries 20000, rho {0.3, 1.0, 1.5}). The YAML is not parsed in
+//    C++, so the values are repeated as constants below.
 //  * k = 40 is not in the YAML (the RunConfig default is 10). The fake backend charges a 100-dc probe on top of
 //    ef, so its floor work 100 + k is 76% of its nominal work at k = 10. Then rho 1.5 gives B_min / B_max = 1.14,
 //    which is infeasible by construction. At k = 40 the ratio is about 0.76, so rho 1.5 is a feasible overload.
@@ -18,7 +17,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <limits>
 #include <map>
 #include <memory>
 #include <random>
@@ -46,8 +44,8 @@ using namespace laef;
 namespace {
 
 // ---- matrix parameters ----
-constexpr uint32_t kThreads = 4;        // qps_matrix.yaml: threads 4 (both fake rows)
-constexpr uint64_t kNQueries = 20000;   // qps_matrix.yaml: n_queries 20000 (both fake rows)
+constexpr uint32_t kThreads = 4;        // qps_matrix.yaml: threads 4 (the fake row)
+constexpr uint64_t kNQueries = 20000;   // qps_matrix.yaml: n_queries 20000 (the fake row)
 constexpr uint32_t kK = 40;             // not in the YAML; see the file header
 constexpr uint32_t kDim = 16;           // query dimension of the fake backend (its cost model ignores it)
 constexpr uint64_t kWarmup = 1000;      // workload.warmup_queries default (config.h)
@@ -129,8 +127,7 @@ struct CaseRun {
   EngineResult res;
   WorkloadCfg workload;           // absolute qps
   double t_slo_s = 0;
-  double target_qps = 0;          // poisson target; step cases leave it at 0
-  double burst_end_s = -1;        // step profile: end of the highest-rate phase
+  double target_qps = 0;          // poisson target rate
   double wall_s = 0;              // measured wall time of run_engine
 };
 
@@ -144,7 +141,6 @@ CaseRun execute(const Fixture& f, WorkloadCfg w) {
   out.eval_idx = pick_queries(out.arrivals.size(), f.pool, w.seed + 1);
   out.t_slo_s = f.t_slo_s;
   out.target_qps = w.profile == "poisson" ? w.qps : 0.0;
-  out.burst_end_s = burst_end_s(w);
 
   EngineInputs ei;
   ei.cfg = &cfg;
@@ -183,23 +179,6 @@ const CaseRun& poisson_case(double rho) {
   w.warmup_queries = kWarmup;
   w.seed = 7;
   return cache.emplace(rho, execute(fx, w)).first->second;
-}
-
-// Case B: infeasible step [3.0, 0.3] rho. Phase durations come from target query counts at mu_sat:
-// 18,300 queries at 3.0 rho (the burst) and 1,700 at 0.3 rho (the tail). The tail must last long enough for the
-// backlog to drain and for floor mode to clear, and must not carry more than about 5% of the queries.
-const CaseRun& step_case() {
-  static const CaseRun run = [] {
-    static const Fixture fx = make_fixture();
-    WorkloadCfg w;
-    w.profile = "step";
-    const double mu = mu_sat_qps();
-    w.phases = {PhaseCfg{3.0 * mu, 18300.0 / (3.0 * mu)}, PhaseCfg{0.3 * mu, 1700.0 / (0.3 * mu)}};
-    w.warmup_queries = kWarmup;
-    w.seed = 7;
-    return execute(fx, w);
-  }();
-  return run;
 }
 
 // ---- checks shared by the cases ----
@@ -265,7 +244,6 @@ TEST_P(FakeRho, SummaryAndQueriesFilesAreWrittenWithRecallInRange) {
   sp.t_slo_ms = c.t_slo_s * 1e3;
   sp.offered_qps = c.target_qps;
   sp.target_recall = 0.95;
-  sp.burst_end_s = -1;
   sp.controller_update_us = c.res.controller_update_us;
   sp.generator_lag_p99_us = c.res.generator_lag_p99_us;
   const json summary = compute_summary(c.res.records, c.res.timeseries, sp);
@@ -348,59 +326,7 @@ TEST_P(FakeRho, FeasibleOverloadRunTerminatesWithinThreeTimesSchedule) {
 
 INSTANTIATE_TEST_SUITE_P(MatrixCaseA, FakeRho, ::testing::Values(0.3, 1.0, 1.5));
 
-// ---- Case B: infeasible step 3.0 -> 0.3 rho ----
-
-TEST(FakeInfeasibleStep, InfeasibleBurstDropsNothing) {
-  const CaseRun& c = step_case();
-  EXPECT_NEAR(static_cast<double>(c.arrivals.size()), static_cast<double>(kNQueries), 500.0)
-      << "step durations were sized for 20000 queries";
-  expect_no_drops(c);
-  expect_recall_in_unit_interval(c);
-}
-
-TEST(FakeInfeasibleStep, FloorModeIsOnInAtLeastNinetyPercentOfWindowsDuringTheBurst) {
-  // "After warm-up" is read as: from the end of warm-up to the end of the burst. Windows after the burst are
-  // the recovery period and are checked by the tests below.
-  const CaseRun& c = step_case();
-  const double warm_end_s = static_cast<double>(c.arrivals[kWarmup]) * 1e-9;
-  size_t windows = 0, floored = 0;
-  for (const auto& row : c.res.timeseries) {
-    if (row.t_s < warm_end_s || row.t_s > c.burst_end_s) continue;
-    ++windows;
-    if (row.floor_mode) ++floored;
-  }
-  ASSERT_GE(windows, 3u) << "too few controller windows in the burst";
-  EXPECT_GE(static_cast<double>(floored), 0.9 * static_cast<double>(windows));
-}
-
-TEST(FakeInfeasibleStep, AtLeastNinetyFivePercentOfQueriesRunAtK) {
-  const CaseRun& c = step_case();
-  const auto served = measured(c);
-  size_t at_k = 0;
-  for (const QueryRecord* r : served)
-    if (r->ef_used == kK) ++at_k;
-  EXPECT_GE(static_cast<double>(at_k), 0.95 * static_cast<double>(served.size()));
-}
-
-TEST(FakeInfeasibleStep, FloorModeClearsAfterTheLoadDropsAndBudgetRecovers) {
-  // Only the "floor clears" and "B rises from its post-burst trough" parts of the plan are asserted here. Returning
-  // to 0.95 * B_max needs about 35 windows at +2% after a x0.5 cut, which is longer than the tail this matrix row can
-  // afford (the recovery-time metric in summary.json reports the real value).
-  const CaseRun& c = step_case();
-  ASSERT_FALSE(c.res.timeseries.empty());
-  bool cleared = false;
-  double min_B_after = std::numeric_limits<double>::infinity();
-  for (const auto& row : c.res.timeseries) {
-    if (row.t_s <= c.burst_end_s) continue;
-    if (!row.floor_mode) cleared = true;
-    min_B_after = std::min(min_B_after, row.B);
-  }
-  EXPECT_TRUE(cleared) << "floor mode never cleared after the burst";
-  EXPECT_FALSE(c.res.timeseries.back().floor_mode) << "floor mode still on at the last window";
-  EXPECT_GT(c.res.timeseries.back().B, min_B_after) << "B has not risen from its post-burst trough";
-}
-
-// ---- Real-dataset cases (qps_matrix.yaml rows 3-10) ----
+// ---- Real-dataset cases (qps_matrix.yaml rows 2-9) ----
 // A case skips when <repo>/data/artifacts/<id>/ lacks one of the required files. When the files exist it still
 // skips: running a real dataset needs dataset_io, price_list_io and AnnBackend::open (adaef_backend.cpp), and this
 // target does not link laef_adaef or the readers, so the run is not wired yet.

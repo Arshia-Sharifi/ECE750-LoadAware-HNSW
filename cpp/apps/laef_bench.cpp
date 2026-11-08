@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   app.add_option("--controller", controller, "p_aimd | fixed_aimd | static_capacity | none");
   app.add_option("--floor-mode", floor_mode, "on | off (ablation; off keeps queries on the allocator)");
   app.add_option("--slo-ms", slo_ms, "T_SLO in ms (required unless slo.ms is set in --config)");
-  app.add_option("--qps", qps, "arrival rate lambda [queries/s] (poisson, constant, step, mmpp2)");
+  app.add_option("--qps", qps, "arrival rate lambda [queries/s] (poisson, constant)");
   app.add_option("-n,--n-queries", n_queries, "arrivals for the poisson and constant profiles");
   app.add_option("--duration-s", duration_s, "duration for the poisson and constant profiles");
   app.add_option("--repeat", repeat, "repeat index; added to the workload seed");
@@ -172,7 +172,6 @@ int main(int argc, char** argv) {
     sp.t_slo_ms = t_slo_s * 1e3;
     sp.offered_qps = offered_qps;
     sp.target_recall = cfg.target_recall;
-    sp.burst_end_s = laef::burst_end_s(cfg.workload);
     sp.controller_update_us = res.controller_update_us;
     sp.generator_lag_p99_us = res.generator_lag_p99_us;
     sp.full_probe_len = menu.full().probe_len;

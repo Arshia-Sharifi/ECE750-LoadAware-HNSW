@@ -108,9 +108,8 @@ nlohmann::json compute_summary(const std::vector<QueryRecord>& queries, const st
     s["frac_target_recall"] = static_cast<double>(at_target) / recalls.size();
   }
 
-  // Control: window statistics and recovery after a burst.
+  // Control: window statistics.
   uint64_t violation = 0, headroom = 0, comfort = 0, guard = 0, floor_windows = 0, p95_bad = 0;
-  double recovery = -1;
   for (const auto& w : ts) {
     if (std::string(w.zone) == "violation") ++violation;
     else if (std::string(w.zone) == "headroom") ++headroom;
@@ -118,8 +117,6 @@ nlohmann::json compute_summary(const std::vector<QueryRecord>& queries, const st
     if (w.guard_fired) ++guard;
     if (w.floor_mode) ++floor_windows;
     if (w.p95_ms > p.t_slo_ms) ++p95_bad;
-    if (recovery < 0 && p.burst_end_s >= 0 && w.t_s >= p.burst_end_s && w.B_max > 0 && w.B >= 0.95 * w.B_max)
-      recovery = w.t_s - p.burst_end_s;
   }
   const double nw = static_cast<double>(ts.size());
   s["frac_windows_violation"] = ts.empty() ? 0.0 : violation / nw;
@@ -128,7 +125,6 @@ nlohmann::json compute_summary(const std::vector<QueryRecord>& queries, const st
   s["guard_fires"] = guard;
   s["floor_mode_windows"] = floor_windows;
   s["p95_window_violations"] = p95_bad;
-  s["recovery_time_s"] = (p.burst_end_s >= 0 && recovery >= 0) ? nlohmann::json(recovery) : nlohmann::json(nullptr);
   return s;
 }
 

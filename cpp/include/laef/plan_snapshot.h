@@ -32,7 +32,7 @@ struct PlanSnapshot {
 
 enum class TBase { Mean, Tail };
 
-// Builds the snapshot from one controller update (Main Flow §5, §5.1; plan §1A.5). Floor mode runs the shortest probe.
+// Builds the snapshot from one controller update (Main Flow §5, §5.1; plan §1A.5). Floor mode runs the full probe.
 // Policies without a cut (kind Passthrough) always run the full probe.
 inline PlanSnapshot make_snapshot(const ControllerOutput& o, const ProbeMenu& menu, CutKind kind, double lambda_hat,
                                   double mean_service, double s_p95, double t_slo, TBase tb, uint64_t version) {
@@ -55,13 +55,13 @@ inline PlanSnapshot make_snapshot(const ControllerOutput& o, const ProbeMenu& me
   }
 
   if (kind == CutKind::Passthrough) s.probe_idx = 0;
-  else if (o.floor_mode) s.probe_idx = menu.smallest_index();
+  else if (o.floor_mode) s.probe_idx = 0;  // floor mode is anchored to the full probe
   else s.probe_idx = menu.choose(s.w_target, kind);
   s.water_level = s.water_level_by_L[s.probe_idx];
   s.uniform_fraction = s.uniform_fraction_by_L[s.probe_idx];
-  // In floor mode every query runs the shortest probe at its floor rung, so reserve that work.
+  // In floor mode every query runs the full probe at its floor rung, so reserve that work.
   s.reservation = (kind != CutKind::Passthrough && o.floor_mode)
-                      ? menu.smallest().price_list.model_floor_work()
+                      ? menu.full().price_list.model_floor_work()
                       : menu.at(s.probe_idx).price_list.expected_at(s.w_target, kind).work;
   return s;
 }

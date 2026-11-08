@@ -10,7 +10,7 @@ namespace laef {
 
 struct PAimdParams {
   double cut_floor = 0.50;  // never cut more than half at once
-  double headroom = 0.85;   // p95 < headroom*T_SLO -> grow
+  double headroom = 0.95;   // p95 < headroom*T_SLO -> grow
   double growth = 1.02;     // +2% per window
   bool guard = true;        // tail-aware queue guard
 };

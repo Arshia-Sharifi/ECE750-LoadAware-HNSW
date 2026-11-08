@@ -198,7 +198,7 @@ TEST(ProbeMenu, Choose) {
   const ProbeMenu menu({full, shorter});
   const CutKind wf = CutKind::WaterFilling;
 
-  EXPECT_EQ(menu.choose(1e9, wf), 0u);    // light load: the full probe, as stock Ada-ef
+  EXPECT_EQ(menu.choose(1e9, wf), 0u);    // both at nominal; the full probe has the higher recall
   EXPECT_EQ(menu.choose(4000, wf), 0u);   // both fit; full at 3000 / 0.95 beats the short probe at 1700 / 0.93
   EXPECT_EQ(menu.choose(2100, wf), 1u);   // full needs both cuts (2000 / 0.90); short fits at 1700 / 0.93
   EXPECT_EQ(menu.choose(1000, wf), 1u);   // full cannot fit (floor 2000); short cuts to 1000 / 0.90

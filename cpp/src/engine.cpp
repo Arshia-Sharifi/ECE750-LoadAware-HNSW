@@ -298,13 +298,13 @@ EngineResult run_engine(const EngineInputs& in) {
           ci.mean_service = v.mean_service;
           ci.unit_cost = v.unit_cost;
           ci.arrival_rate = v.arrival_rate;
-          ci.floor_work = menu.smallest().price_list.model_floor_work();  // B_min: the shortest probe at ef = k
+          ci.floor_work = menu.full().price_list.model_floor_work();  // B_min: the full probe at ef = k
           ci.t_slo = t_slo;
           ci.C = in.threads;
           const int64_t c0 = now_ns();
           const ControllerOutput o = ctrl->update(ci);
           ctrl_us.push_back((now_ns() - c0) * 1e-3);
-          // floor_mode.enabled = false (ablation): the snapshot never forces the shortest probe; the controller's
+          // floor_mode.enabled = false (ablation): the snapshot never forces the floor probe; the controller's
           // own floor flag is still logged below.
           ControllerOutput planned = o;
           planned.floor_mode = o.floor_mode && cfg.floor_mode.enabled;

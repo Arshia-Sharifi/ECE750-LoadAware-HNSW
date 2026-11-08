@@ -43,7 +43,7 @@ TEST(PAimd, ProportionalCutWithoutGuard) {
 
 TEST(PAimd, HeadroomGrowsAndCapsAtBmax) {
   PAimdController c({}, 3e6);
-  auto in = base();  // p95 = 5ms < 8.5ms
+  auto in = base();  // p95 = 5ms < 9.5ms
   EXPECT_NEAR(c.update(in).B, 3.06e6, 1);
   c.reset(3.99e6);
   EXPECT_NEAR(c.update(in).B, 4e6, 1);
@@ -52,7 +52,7 @@ TEST(PAimd, HeadroomGrowsAndCapsAtBmax) {
 TEST(PAimd, ComfortBandHolds) {
   PAimdController c({}, 3e6);
   auto in = base();
-  in.p95 = 9e-3;
+  in.p95 = 9.6e-3;
   auto o = c.update(in);
   EXPECT_NEAR(o.B, 3e6, 1);
   EXPECT_STREQ(o.zone, "comfort");

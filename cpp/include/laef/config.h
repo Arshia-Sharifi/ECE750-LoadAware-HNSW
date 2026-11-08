@@ -46,7 +46,7 @@ struct WindowCfg { uint64_t n = 500; double max_ms = 20; uint64_t min_samples = 
 struct TelemetryCfg { double alpha_u = 0.05, alpha_es = 0.05, alpha_lambda = 0.2, lambda_tick_ms = 10; };
 struct ControllerCfg {
   std::string type = "p_aimd";  // p_aimd | fixed_aimd | static_capacity | none
-  double cut_floor = 0.5, headroom = 0.85, growth = 1.02;
+  double cut_floor = 0.5, headroom = 0.95, growth = 1.02;
   bool guard = true;
   double fixed_cut = 0.9;
   bool fixed_guard = false;     // fixed_aimd keeps the guard off by default (naive baseline)
@@ -58,17 +58,13 @@ struct AllocatorCfg {
   std::string uniform_mode = "work";   // work | ef
 };
 struct FloorModeCfg { bool enabled = true; };
-struct PhaseCfg { double qps = 0, duration_s = 0; };  // absolute arrival rate [queries/s] and length [s]
 struct WorkloadCfg {
-  std::string profile = "poisson";  // arrival process: poisson | constant | step | mmpp2 | trace (workload.h)
-  double qps = 0;                   // arrival rate lambda [queries/s]; required for poisson, constant, step, mmpp2
+  std::string profile = "constant";  // arrival process: constant | poisson (workload.h)
+  double qps = 0;                   // arrival rate lambda [queries/s]; required for poisson and constant
   uint64_t n_queries = 20000;
-  double duration_s = 0;            // > 0 overrides n_queries (poisson, constant, mmpp2)
+  double duration_s = 0;            // > 0 overrides n_queries (poisson, constant)
   uint64_t warmup_queries = 1000;
   uint64_t seed = 7;
-  std::vector<PhaseCfg> phases;     // step
-  double qps_lo = 0, qps_hi = 0, mean_lo_s = 1.0, mean_hi_s = 0.3;  // mmpp2: rates [queries/s], mean sojourns [s]
-  std::string trace_csv;            // trace: one arrival time [s] per line
 };
 
 struct RunConfig {
@@ -108,10 +104,6 @@ inline void apply_policy(RunConfig& c, const std::string& p) {
 }
 
 // ---------------- JSON <-> structs ----------------
-inline void merge(PhaseCfg& c, const json& j) {
-  detail::get_if(j, "qps", c.qps); detail::get_if(j, "duration_s", c.duration_s);
-}
-
 inline void merge(RunConfig& c, const json& j) {
   using detail::get_if;
   if (j.contains("policy") && j["policy"].is_string() && !j["policy"].get<std::string>().empty())
@@ -159,18 +151,10 @@ inline void merge(RunConfig& c, const json& j) {
     get_if(*s, "profile", w.profile); get_if(*s, "qps", w.qps);
     get_if(*s, "n_queries", w.n_queries); get_if(*s, "duration_s", w.duration_s);
     get_if(*s, "warmup_queries", w.warmup_queries); get_if(*s, "seed", w.seed);
-    get_if(*s, "qps_lo", w.qps_lo); get_if(*s, "qps_hi", w.qps_hi);
-    get_if(*s, "mean_lo_s", w.mean_lo_s); get_if(*s, "mean_hi_s", w.mean_hi_s); get_if(*s, "trace_csv", w.trace_csv);
-    if (auto p = s->find("phases"); p != s->end() && p->is_array()) {
-      w.phases.clear();
-      for (const auto& pj : *p) { PhaseCfg ph; merge(ph, pj); w.phases.push_back(ph); }
-    }
   }
 }
 
 inline json to_json(const RunConfig& c) {
-  json phases = json::array();
-  for (const auto& p : c.workload.phases) phases.push_back({{"qps", p.qps}, {"duration_s", p.duration_s}});
   return {
       {"k", c.k}, {"target_recall", c.target_recall}, {"policy", c.policy}, {"dataset", c.dataset},
       {"hnsw", {{"M", c.hnsw.M}, {"ef_construction", c.hnsw.ef_construction}, {"seed", c.hnsw.seed}}},
@@ -195,10 +179,8 @@ inline json to_json(const RunConfig& c) {
       {"probe", {{"enabled", c.probe.enabled}}},
       {"workload", {{"profile", c.workload.profile}, {"qps", c.workload.qps},
                     {"n_queries", c.workload.n_queries}, {"duration_s", c.workload.duration_s},
-                    {"warmup_queries", c.workload.warmup_queries}, {"seed", c.workload.seed}, {"phases", phases},
-                    {"qps_lo", c.workload.qps_lo},
-                    {"qps_hi", c.workload.qps_hi}, {"mean_lo_s", c.workload.mean_lo_s},
-                    {"mean_hi_s", c.workload.mean_hi_s}, {"trace_csv", c.workload.trace_csv}}},
+                    {"warmup_queries", c.workload.warmup_queries}, {"seed", c.workload.seed}}},
+
   };
 }
 

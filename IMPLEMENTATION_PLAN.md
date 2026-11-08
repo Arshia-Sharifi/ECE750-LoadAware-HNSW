@@ -31,7 +31,7 @@
 | VectorSource protocol, ArraySource, NpySource, AnnHdf5Source, ParquetSource | 🟡 rewritten, not run | `prep/sources.py` | sorted takes (h5py needs increasing indices); `NpySource` reads our `.npy` files through a memmap; `AnnHdf5Source` is only for the ann-benchmarks downloads; Parquet read in record batches; no `isinstance` on a Protocol |
 | registry / download / convert / synthetic / calibration / manifest / CLI | 🟡 rewritten, not run | `prep/*.py`, `run_preprocess.py` | rewritten in the verification pass: path layout (train.npy and test.npy stay local), signatures, streaming writes, provided-GT handling; re-run `pytest` and a small dataset on WSL |
 | **Colab notebook** | ✅ written, not run | `gpu_preprocessing/colab_preprocess.ipynb` | drives `run_preprocess.py` with the flags in §7.1; checks every output file |
-| **Analysis notebooks E0–E5** | ✅ written, not run | `analysis/notebooks/01_calibration … 04_ablations.ipynb` | self-contained (pandas + matplotlib); read only the files in §11.4; save figures to `results/figures/<exp>/` |
+| **Analysis notebooks E0, E1, E4, E5** | ✅ written, not run | `analysis/notebooks/01_calibration, 02_load_sweep and 04_ablations.ipynb` | self-contained (pandas + matplotlib); read only the files in §11.4; save figures to `results/figures/<exp>/` |
 | Controllers: P-AIMD, fixed-AIMD, static-capacity (+ shared limits/clamp) | ✅ | `include/laef/controllers/*.h` | `test_p_aimd` (incl. MF §8 Phase 3 → B = 2.4M, floor mode) |
 | controller_factory / allocator_factory | ✅ | `controllers/controller_factory.h`, `allocators/allocator_factory.h` | take the config structs from `config.h`; `make_controller` returns `nullptr` for `none` |
 | `config.h` (RunConfig + JSON merge/serialize + policy presets) | ✅ | `include/laef/config.h` | mirrors `defaults.yaml`; `merge()` applies a `"policy"` preset first, then explicit keys |
@@ -40,7 +40,7 @@
 | Sensor window (exact nearest-rank p95, close rules) | ✅ | `sensor_window.h` | `test_token_bucket` (SensorWindow.*) |
 | Price list: envelope, grouping, interpolation, steps, water level | ✅ | `price_list.h` | `test_price_list` |
 | price_list.json load/save | 🟡 written, not compiled | `include/laef/price_list_io.h`, `src/price_list.cpp` | rewritten on the real `PriceList` API (public groups, `finalize()`); steps are derived, not stored |
-| dataset_io, workload, results_writer, fake_backend | 🟡 written, not compiled | `src/*.cpp`, `include/laef/{dataset_io,workload,results_writer,fake_backend}.h` | `workload.h` was an empty stub before; `rho` is converted to qps by `run_experiments.py`, so the engine takes qps only; step phases start at their boundary; `pick_queries` always returns n_queries rows |
+| dataset_io, workload, results_writer, fake_backend | 🟡 written, not compiled | `src/*.cpp`, `include/laef/{dataset_io,workload,results_writer,fake_backend}.h` | `workload.h` was an empty stub before; `rho` is converted to qps by `run_experiments.py`, so the engine takes qps only; `pick_queries` always returns n_queries rows |
 | Step A driver: preference pass, ladder sweep, groups, envelopes, static ef | 🟡 written, not compiled | `include/laef/calibration.h`, `src/calibration.cpp`, `apps/laef_calibrate.cpp` | the query_holdout zero-recall filter (finding 5) is in `usable_calibration_rows`, and `laef_calibrate` writes `calibration/samplings_valid.bin` from it; base_sample is unaffected |
 | apps (build_index, calibrate, profile, bench) | 🟡 syntax-checked, not linked | `apps/*.cpp`, `include/laef/config.h` | saturation tail seeding is implemented; full link requires Eigen/Boost |
 | engine (generator, workers, controller) | 🟡 core-built, Ada-ef integration pending | `include/laef/engine.h`, `src/engine.cpp` | core-only build and fake QPS tests run; real backend still needs full Ada-ef build |
@@ -368,7 +368,7 @@ Implementation/
 ├── analysis/
 │   ├── requirements.txt
 │   ├── laef_analysis/{__init__,io,metrics,plots}.py
-│   └── notebooks/01_calibration.ipynb … 04_ablations.ipynb
+│   └── notebooks/01_calibration, 02_load_sweep and 04_ablations.ipynb
 ├── data/                           (gitignored) raw/ + artifacts/<dataset>/
 └── results/                        (gitignored) <experiment>/<run>/
 ```
@@ -848,11 +848,8 @@ The reservation refund, affordability check, and planned-work debit happen under
 `std::vector<int64_t> make_arrivals(const WorkloadCfg&, uint64_t seed)` returns arrival offsets in ns, and `pick_queries(n, n_eval, seed)` chooses evaluation query indices with replacement. Profiles:
 - `poisson {qps}`
 - `constant {qps}` (evenly spaced arrivals, gap = 1/qps; used by the SLO study)
-- `step {phases: [{qps, duration_s}]}` (the burst pattern of MF §8, in queries per second)
-- `mmpp2 {qps_lo, qps_hi, mean_lo_s, mean_hi_s}`
-- `trace {csv}`
 
-The `poisson` profile draws exponential gaps between arrivals, so arrivals form a Poisson process with rate λ. The design documents (Main Flow, Budget B) do not name an arrival distribution, so this is our assumption. A perfectly regular schedule would understate queueing and tail latency. The `step` profile reproduces the piecewise-constant rates of MF §8. `mmpp2` (E3) and `trace` are experiment-only profiles that the design documents do not describe.
+The `poisson` profile draws exponential gaps between arrivals, so arrivals form a Poisson process with rate λ. The design documents (Main Flow, Budget B) do not name an arrival distribution, so this is our assumption. A perfectly regular schedule would understate queueing and tail latency.
 
 Rates are absolute arrival rates λ in queries per second (`qps`). The engine never sees a load factor. Experiments write `rho`, a multiple of the profiled saturation throughput μ_sat(C) from `profile_C{C}.json`, and `scripts/run_experiments.py` converts it to `qps` once per run, so every `run_config.json` holds absolute rates. Lengths are given as `n_queries` or `duration_s`. Warm-up queries (`workload.warmup_queries`, default 1000) run but are excluded from the metrics.
 
@@ -894,11 +891,11 @@ The notebooks are self-contained and read only these files, so the C++ and `run_
 | `tables/calibration_sweep.csv` | `query, score, ef_pref, ef, recall, ndis, probe_ndis, service_us, is_pref`. **`probe_ndis` is a new column**, needed for the E0 probe-share plot (finding 4). Preference-pass rows have `is_pref = 1`; ladder-sweep rows have `is_pref = 0`. |
 | `tables/price_list.json` | The §9.4 schema. Keys used: `k, target_recall, ladder, static_ef_for_target, floor_work_mean, nominal_work_mean, calib_mean_recall_at_pref, groups[id, score_lo, score_hi, p, ef_pref_median, ladder, recall, work], steps_sorted[group, from, to, d_recall, d_work, loss]`. |
 | `profile/profile_C{C}.json` | `{"threads": C, "k": k, "M": M, "adaef": {"dataset", "metric", "k", "M", "target_recall", "quantile_step", "statics_length", "ef_upper_bound"}, "idle": {"mean_s","p50_s","p95_s","p99_s","u_s_per_dc","mean_ndis"}, "saturation": {"mu_sat_qps","u_s_per_dc","mean_service_s","s_p95_s"}}` |
-| `<run>/config.json` | The resolved `RunConfig` (`to_json` in `config.h`) **plus** top-level `t_slo_s`, `repeat`, `dataset` and `policy`. `workload.phases[*].qps` must hold the **absolute** rate after ρ is resolved. |
+| `<run>/config.json` | The resolved `RunConfig` (`to_json` in `config.h`) **plus** top-level `t_slo_s`, `repeat`, `dataset` and `policy`. `workload.qps` must hold the **absolute** rate after ρ is resolved. |
 | `<run>/queries.csv` | `qid, eval_idx, warmup, t_arrival_us, wait_us, service_us, latency_us, status, score, group, ef_pref, ef_used, forced_floor, floor_mode, ndis, probe_ndis, planned_work, recall`. **`warmup` and `probe_ndis` are new columns.** `status` ∈ {ok, probe_incomplete}. `group = -1` and `score = -1` for static-ef. Every query has a recall value. |
 | `<run>/timeseries.csv` | Columns as in §11.3: `t_s, B, B_max, B_min, D, p95_ms, s_p95_ms, Q, W_hat_ms, u_ns, ES_ms, lambda_hat, w_target, water_level, uniform_fraction, zone, guard_fired, floor_mode, slo_violated`. Rows are written for **every** policy, including `controller.type = none`, so baselines get p95/Q time series too. |
-| `<run>/summary.json` | Keys: `n_queries, n_ok, n_probe_incomplete, offered_qps, achieved_qps, goodput_qps, slo_ms, p50_ms, p95_ms, p99_ms, mean_wait_ms, mean_service_ms, slo_attainment, latency_excess_ms, mean_recall, p5_recall, p1_recall, frac_target_recall, mean_ef_ratio, mean_ndis, forced_floor_rate, floor_mode_query_rate, n_windows, frac_windows_violation, frac_windows_headroom, frac_windows_comfort, guard_fires, floor_mode_windows, p95_window_violations, recovery_time_s (null unless step profile), controller_update_us, generator_lag_p99_us, wall_s`. All are computed over non-warmup queries. `p5_recall` / `p1_recall` are the 5th / 1st percentiles of per-query recall. |
-| `results/<exp>/summary.csv` | One row per run: `run_id, experiment, dataset, policy, threads, slo_fraction, profile, rho, repeat, axis, axis_value` followed by every `summary.json` key. `run_id` is the run's directory name under `results/<exp>/`. For step and MMPP profiles, `rho` is the peak ρ. For E1–E3, `axis = base`. For E4, the shared baseline runs have `axis = base`, and each varied run has `axis` = the dotted config key (e.g. `controller.guard`) and `axis_value = str(python value)` (e.g. `True`, `500`, `2.0`, `p_aimd`). E5 runs go to `results/e5_threads/summary.csv` with `axis = threads`. |
+| `<run>/summary.json` | Keys: `n_queries, n_ok, n_probe_incomplete, offered_qps, achieved_qps, goodput_qps, slo_ms, p50_ms, p95_ms, p99_ms, mean_wait_ms, mean_service_ms, slo_attainment, latency_excess_ms, mean_recall, p5_recall, p1_recall, frac_target_recall, mean_ef_ratio, mean_ndis, forced_floor_rate, floor_mode_query_rate, n_windows, frac_windows_violation, frac_windows_headroom, frac_windows_comfort, guard_fires, floor_mode_windows, p95_window_violations, controller_update_us, generator_lag_p99_us, wall_s`. All are computed over non-warmup queries. `p5_recall` / `p1_recall` are the 5th / 1st percentiles of per-query recall. |
+| `results/<exp>/summary.csv` | One row per run: `run_id, experiment, dataset, policy, threads, slo_fraction, profile, rho, repeat, axis, axis_value` followed by every `summary.json` key. `run_id` is the run's directory name under `results/<exp>/`. For E1, `axis = base`. For E4, the shared baseline runs have `axis = base`, and each varied run has `axis` = the dotted config key (e.g. `controller.guard`) and `axis_value = str(python value)` (e.g. `True`, `500`, `2.0`, `p_aimd`). E5 runs go to `results/e5_threads/summary.csv` with `axis = threads`. |
 
 Figures are written to `results/figures/<experiment>/`.
 
@@ -967,7 +964,6 @@ The cases are parameterized from `qps_matrix.yaml`. The fake-backend cases alway
 ```yaml
 # configs/tests/qps_matrix.yaml
 - {dataset: fake,              threads: 4, n_queries: 20000, rho: [0.3, 1.0, 1.5]}
-- {dataset: fake,              threads: 4, n_queries: 20000, infeasible_step: [3.0, 0.3]}   # floor mode, no drops
 - {dataset: synthetic-small,   threads: 4, n_queries: 5000,  rho: [0.3, 1.0, 1.5]}
 - {dataset: glove-100-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
 - {dataset: deep-image-96-angular, threads: 4, n_queries: 10000, rho: [0.5, 1.5]}
@@ -982,8 +978,7 @@ Assertions for each case, with policy `laef_wf` and slo `auto`:
 2. **Offered QPS:** n_queries / (last scheduled arrival − first) is within ±5% of the target. The generator lag p99 is < 1 ms.
 3. **Light load (ρ ≤ 0.5):** p95 ≤ T_SLO; floor mode never on; ≥ 99% of queries have `ef_used == ef_pref`, meaning LA-ef behaves exactly like Ada-ef when it is not overloaded.
 4. **Feasible overload (ρ = 1.5, with B_min < B_max in the run):** B_min ≤ B ≤ B_max in every window; mean `ef_used` < mean `ef_pref`; p95 ≤ 1.2·T_SLO after the first 10 windows. The run terminates (no deadlock) within 3× its scheduled duration.
-5. **Infeasible overload (fake backend only, ρ chosen so that λ·c̄(k) > B_max):** all `n_queries` complete (no drops); floor mode is on in ≥ 90% of the windows after warm-up; ≥ 95% of queries run at `ef_used == k`; p95 > T_SLO is **allowed** and is reported; once the load stops, floor mode clears and B recovers (checked by a step profile 3.0 → 0.3 ρ).
-6. For each run, `summary.json` exists and recall ∈ [0, 1].
+5. For each run, `summary.json` exists and recall ∈ [0, 1].
 
 ---
 
@@ -999,8 +994,6 @@ Defaults: k = 10, target recall 0.95, C = `--threads` (record the core count of 
 |---|---|---|
 | **E0 Calibration** | Does Ada-ef hit its target at idle? What do the price lists look like? | 4 datasets; `laef_calibrate` outputs only. Plots of r̄_g(e), c̄_g(e), ℓ distribution, p_g. |
 | **E1 Load sweep** | How do recall and latency change as load grows? | 7 datasets × {static_ef, ada_ef, laef_uniform, laef_wf} × Poisson ρ ∈ {0.5, 0.8, 1.0, 1.2, 1.5, 2.0} × m ∈ {3, 5} |
-| **E2 Step burst** | Transient behaviour (MF §8) | glove + deep × {ada_ef, laef_uniform, laef_wf} × step 0.3 → 1.5 → 0.3 ρ (5 s / 5 s / 5 s), m = 5 |
-| **E3 Bursty traffic** | Realistic bursts | glove + deep × same policies × MMPP-2 (ρ_lo 0.4, ρ_hi 1.6, mean 1 s / 0.3 s) |
 | **E4 Ablations** | Which parts matter? | glove, ρ ∈ {1.2, 2.0}: controller {p_aimd, fixed_aimd, static_capacity}; guard on/off; floor mode on/off; window n ∈ {250, 500, 1000}; growth ∈ {1.01, 1.02, 1.05}; ladder ratio {√2, 2} |
 | **E5 Threads** | Hardware contention | glove + deep × laef_wf × C ∈ {1, 2, 4, …, cores}, ρ = 1.2. Reports u(C) and B_max(C). |
 
@@ -1009,7 +1002,7 @@ Defaults: k = 10, target recall 0.95, C = `--threads` (record the core count of 
 - **Throughput:** goodput = queries per second completed within the SLO; achieved throughput.
 - **Quality:** mean recall; P5 and P1 recall (the hardest 5% and 1%, the Ada-ef paper's tail metric); fraction of queries reaching the target recall.
 - **Effort:** mean ef_used/ef_pref, mean ndis, forced-floor rate.
-- **Control:** time spent in each zone; guard-fire count; recovery time after a burst (time from the burst ending until B ≥ 0.95·B_max); number of p95 window violations; controller overhead (µs per update).
+- **Control:** time spent in each zone; guard-fire count; number of p95 window violations; controller overhead (µs per update).
 - Headline comparison: **laef_wf vs laef_uniform at matched SLO attainment**, comparing effective recall and P5/P1 recall. This tests the claim that water-filling protects recall better than equal cuts.
 
 ### 14.3 Analysis (`analysis/`)
@@ -1017,18 +1010,17 @@ Defaults: k = 10, target recall 0.95, C = `--threads` (record the core count of 
 - `metrics.py`: recomputes metrics from `queries.csv`, as a cross-check of the C++ numbers.
 - `plots.py`:
   - recall-vs-ρ and p95-vs-ρ per dataset (E1);
-  - B(t), p95(t), Q(t) and floor_mode(t) time series with the burst phases shaded (E2/E3);
+  - B(t), p95(t), Q(t) and floor_mode(t) time series;
   - per-group ef_used histograms (shows who absorbs the cuts);
   - ablation bar charts (E4);
   - u(C) curve (E5).
 
-The notebooks `01`–`04` (✅ written) are **self-contained**: each one reads the §11.4 files directly with pandas and matplotlib, so they work without `laef_analysis`. `laef_analysis` is still useful for scripted cross-checks (e.g. `metrics.py` recomputing `summary.json` from `queries.csv`), but the notebooks do not import it.
+The notebooks `01`, `02` and `04` (✅ written) are **self-contained**: each one reads the §11.4 files directly with pandas and matplotlib, so they work without `laef_analysis`. `laef_analysis` is still useful for scripted cross-checks (e.g. `metrics.py` recomputing `summary.json` from `queries.csv`), but the notebooks do not import it.
 
 | Notebook | Experiments | Main outputs |
 |---|---|---|
 | `01_calibration.ipynb` | E0 | summary table (incl. ±0.02 target check, floor/nominal, probe share), per-group recall/work/envelope curves vs raw sweep means, loss-ratio histograms, demand-vs-water-level curve, group shares, Ada-ef operating point (ef_pref, recall P5/P1), static-ef curve |
 | `02_load_sweep.ipynb` | E1 | recall / P5 / p95÷T_SLO / attainment / ef ratio vs ρ per (dataset, m); goodput vs offered QPS; floor-mode rate; **headline wf-vs-uniform table at matched attainment** (`MATCH_TOL = 0.02`); recall–attainment frontier |
-| `03_burst_timeseries.ipynb` | E2, E3 | per-run panels of arrivals, B (with B_max/B_min), window p95, Q, water level and floor mode, with the burst shaded; rolling per-query p95 and recall; per-group ef_used/ef_pref and recall during the burst; summary over repeats (incl. recovery time) |
 | `04_ablations.ipynb` | E4, E5 | bar grid per ablation axis (baseline marked ★); effect sizes vs baseline; B(t)/p95(t) per controller; u(C), B_max(C), μ_sat(C) from the profiles; LA-ef metrics vs C |
 
 ---
@@ -1061,7 +1053,7 @@ The notebooks `01`–`04` (✅ written) are **self-contained**: each one reads t
 | `allocator.type` | water_filling | water_filling \| uniform_cut \| passthrough |
 | `allocator.uniform_mode` | work | work \| ef |
 | `floor_mode.enabled` | true | Never drops; set to false only for the ablation |
-| `workload.profile` / `qps` / `n_queries` / `warmup_queries` / `seed` | poisson / required / 20000 / 1000 / 7 | |
+| `workload.profile` / `qps` / `n_queries` / `warmup_queries` / `seed` | constant / required / 20000 / 1000 / 7 | |
 
 ---
 
@@ -1123,7 +1115,7 @@ The core-only WSL build and focused token-bucket, allocator, planner, and fake-e
 8. [ ] §11 engine + fake backend; reservation clipping and incomplete-probe settlement are implemented and core-tested; run the full fake/synthetic matrix after the Ada-ef build is available
 9. [ ] §12 `laef_profile`, `laef_bench`, `run_experiments.py`; metadata validation and saturation-tail initialization are implemented; build/link the apps and run `configs/experiments/smoke.yaml` end to end
 10. [ ] Remaining datasets: index → calibrate → profile; the real-dataset rows of `test_engine_qps` green
-11. [ ] E1–E5 runs; `analysis` notebooks produce all plots (🟡 notebooks written against §11.4; need real results)
+11. [ ] E1, E4 and E5 runs; `analysis` notebooks produce all plots (🟡 notebooks written against §11.4; need real results)
 
 ### 17.1 v2 checklist (probe-length lever, §1A). Do these in order
 
