@@ -1,48 +1,93 @@
 # LA-ef: Load-Aware Ada-ef
 
-LA-ef adds a load-aware latency controller to Ada-ef's HNSW search. The full spec is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). Design background: `../Main Flow.md` and `../Budget B calculations.md`.
+LA-ef adds a load-aware latency controller and a per-query effort allocator to Ada-ef's HNSW search.
+Under overload the server cannot give every query its preferred `efSearch`, so a budget is split
+across queries. The question the project answers is whether spending that budget where it buys the
+most recall per unit of work preserves more retrieval quality than cutting every query by the same
+amount at the same latency deadline.
 
-**Status:** the code is written but has not been compiled or run. The first job on WSL Ubuntu is to build and test it. The plan's "Implementation status" table lists what was verified and what was not.
+The full specification is in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+
+## Start here
+
+Open [LAEF.ipynb](LAEF.ipynb). It is the single entry point. It checks the machine, builds the C++,
+prepares datasets, runs the index, calibration and profiling steps, launches the thread-scaling
+study and draws every figure. Each step is skipped when its output already exists, so the notebook
+is safe to rerun and an interrupted study continues where it stopped.
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/jupyter lab LAEF.ipynb
+```
+
+The notebook calls into `laef_nb/`, which is documented in [laef_nb/README.md](laef_nb/README.md).
+Nothing else needs to be run by hand. The scripts in `scripts/` are still the underlying entry
+points and can be used directly for a one-off run.
+
+The harness has its own regression suite, which exercises the full intended grid of 3 datasets, 5
+thread counts, 5 loads, 4 SLO fractions and 3 repeats without running the engine.
+
+```bash
+.venv/bin/python -m pytest laef_nb/tests -q
+```
 
 ## Pipeline
 
-1. **Colab T4** (`gpu_preprocessing/`): exact ground truth, calibration samples, estimator statistics and `manifest.json`.
-2. **Serving machine** (WSL2 Ubuntu or Linux, C++20):
-   - `prepare_dataset.sh` rebuilds `train.npy` and `test.npy` from the raw download, checks the fingerprints, and copies the Colab outputs.
-   - `laef_build_index` builds the HNSW index (M = 16, efc = 500).
-   - `laef_calibrate` builds the Ada-ef adapter, the ladder sweep and the price list (Step A).
-   - `laef_profile` measures idle and saturation latency (auto SLO and mu_sat).
-   - `laef_bench` runs one experiment under load (Steps B to F). No query is dropped.
-3. `scripts/run_experiments.py` expands an experiment YAML into `laef_bench` runs and writes `results/<experiment>/summary.csv`. The notebooks in `analysis/notebooks/` plot the results.
+1. **Preprocessing.** Exact ground truth, calibration samplings and estimator statistics. This is
+   GPU work for anything large and runs on Colab through `gpu_preprocessing/colab_preprocess.ipynb`.
+   Small datasets can be prepared locally on CPU from the notebook.
+2. **Index and calibration.** `laef_build_index` builds HNSW at M 16 and ef_construction 500.
+   `laef_calibrate` builds the Ada-ef adapter, the ladder sweep and the price list. Neither depends
+   on the worker count, so both are built once per dataset.
+3. **Profile.** `laef_profile` measures idle and saturation service time at one worker count and
+   writes `profile/profile_C<threads>.json`. Every worker count needs its own profile, because the
+   saturation throughput, the unit cost per distance computation and the saturation p95 that defines
+   `T_SLO` are all measured at that worker count.
+4. **Bench.** `laef_bench` runs one policy on one dataset under one arrival process. No query is
+   dropped.
+5. **Study.** `scripts/run_experiments.py` expands an experiment YAML into bench runs.
+   `scripts/run_slo_study.py` wraps it with a progress bar, per-run interval statistics and
+   aggregation. The notebook generates the YAML and calls both.
+
+## Results layout
+
+```
+results/<study>/
+  c<threads>/ada/<run-id>/     stock Ada-ef at this worker count
+  c<threads>/laef/<run-id>/    LA-ef naive cut and proportional cut
+  summary_all.csv              one row per run
+  comparison.csv               each LA-ef run next to its stock Ada-ef baseline
+  summary_tidy.csv             the same runs with the derived columns used by the figures
+  comparison_tidy.csv
+  figures/                     every plot
+  run.log
+```
+
+Load is expressed as rho, a multiple of that worker count's own measured saturation throughput, so
+each thread count is driven to the same relative pressure. Absolute arrival rates differ between
+thread counts by design, and the baseline for a comparison is always the stock Ada-ef run at the
+same dataset, worker count, load and repeat.
 
 ## Dataset files
 
-Datasets are NumPy `.npy` files with JSON metadata. HDF5 is not used (plan section 4.3).
+Datasets are NumPy `.npy` files with JSON metadata. HDF5 is read only when downloading from
+ann-benchmarks.
 
 ```
 data/artifacts/<id>/
-  train.npy, test.npy, holdout.npy, meta.json   rebuilt on the serving machine (large)
-  gt/neighbors.npy, gt/gt_meta.json             from Colab
-  calibration/samplings.bin, calib_meta.json    from Colab
-  stats/estimator.bin, manifest.json            from Colab
+  train.npy, test.npy, holdout.npy, meta.json   rebuilt on the serving machine
+  gt/neighbors.npy, gt/gt_meta.json             exact ground truth
+  calibration/samplings.bin, calib_meta.json
+  stats/estimator.bin, manifest.json
   index/, tables/, profile/                     built on the serving machine
 ```
 
-## Quick start (WSL2 Ubuntu)
+## Dependencies
 
-Run the scripts with `bash`. A Windows checkout does not keep the executable bit, so `bash scripts/...` always works.
+C++20, CMake 3.22 or newer, Eigen 3.4 and Boost.Math. The notebook downloads Eigen and Boost.Math as
+headers into `cpp/third_party/vendor/` when the system does not provide them, and clones
+`hnsw-ada-ef` at the pinned commit `ed463f9` into `cpp/third_party/`. Python dependencies are in
+`requirements.txt`.
 
-```bash
-bash scripts/setup_wsl_ubuntu.sh                         # apt packages, uv, tool version checks
-uv venv --python 3.11 .venv
-uv pip install -p .venv numpy h5py pyyaml pytest pandas matplotlib
-.venv/bin/python -m pytest gpu_preprocessing/tests -q    # Python tests (CPU)
-git clone https://github.com/chaozhang-cs/hnsw-ada-ef cpp/third_party/hnsw-ada-ef
-git -C cpp/third_party/hnsw-ada-ef checkout ed463f9993868f7ecc7c103920644e7f94abb377
-bash scripts/build.sh                                    # configure, build and ctest
-bash scripts/prepare_dataset.sh glove-100-angular /path/to/laef_artifacts/glove-100-angular
-bash scripts/run_pipeline.sh glove-100-angular 4        # build_index -> calibrate -> profile, C = 4
-.venv/bin/python scripts/run_slo_study.py                # SLO study: stock Ada-ef and LA-ef at fractions of the profile p95 (about 3 hours)
-```
-
-`scripts/build.sh` passes extra arguments to CMake, for example `bash scripts/build.sh -DLAEF_WITH_ADAEF=OFF` for a build without the Ada-ef backend.
+The engine tests are timing sensitive. Run them one at a time. Running them in parallel on a small
+machine produces failures that are contention rather than defects.

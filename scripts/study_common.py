@@ -222,7 +222,7 @@ def write_intervals(study_dir: Path, interval: float, keep_queries: bool) -> int
         if not queries.exists():
             continue
         try:
-            intervals, _, _ = interval_stats.analyse_run(run_dir, interval)
+            intervals, _ = interval_stats.analyse_run(run_dir, interval)
         except (OSError, ValueError, KeyError) as e:
             print(f"warning: {run_dir.name}: intervals.csv not written ({e}); queries.csv kept", flush=True)
             continue

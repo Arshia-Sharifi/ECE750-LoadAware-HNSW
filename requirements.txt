@@ -1,0 +1,12 @@
+# Harness and notebook. The C++ needs cmake, a C++20 compiler, Eigen and Boost.Math.
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.8
+pyyaml>=6
+jupyter>=1.0
+pytest>=8
+# dataset preparation only
+h5py>=3.10
+scikit-learn>=1.4
+requests>=2.31
+tqdm>=4.66

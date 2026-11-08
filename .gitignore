@@ -8,3 +8,5 @@ __pycache__/
 .venv/
 .ipynb_checkpoints/
 cpp/third_party/hnsw-ada-ef/
+cpp/third_party/vendor/
+.pytest_cache/

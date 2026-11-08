@@ -33,25 +33,32 @@ BASELINE = "ada_ef"  # stock Ada-ef: the reference for every LA-ef run
 LA_ALLOCATOR = {"laef_uniform": "naive cut", "laef_wf": "proportional cut"}
 
 
+def _key(r: dict) -> tuple:
+    # The thread count is part of the key: mu_sat, T_SLO and the baseline all change with C.
+    return r["dataset"], int(float(r["threads"])), round(float(r["rho"]), 3), int(float(r.get("repeat", 0) or 0))
+
+
 def comparison(rows: list[dict]) -> list[dict]:
-    """Each LA-ef run next to the stock Ada-ef run at the same dataset and load."""
+    """Each LA-ef run next to the stock Ada-ef run at the same dataset, thread count and load."""
     base = {}
     for r in rows:
         if r["policy"] == BASELINE:
-            base[(r["dataset"], round(float(r["rho"]), 3))] = r
+            base[_key(r)] = r
     out = []
     for r in rows:
         if r["policy"] not in LA_ALLOCATOR:
             continue
-        ds, rho = r["dataset"], round(float(r["rho"]), 3)
-        b = base.get((ds, rho))
+        ds, threads, rho = r["dataset"], int(float(r["threads"])), round(float(r["rho"]), 3)
+        b = base.get(_key(r))
         if b is None:
-            print(f"warning: no stock Ada-ef run for {ds} at rho {rho:g}; {r['run_id']} is not compared", flush=True)
+            print(f"warning: no stock Ada-ef run for {ds} at C={threads}, rho {rho:g}; "
+                  f"{r['run_id']} is not compared", flush=True)
             continue
         slo, p95 = float(r["slo_ms"]), float(r["p95_ms"])
         rec_ref, rec = float(b["mean_recall"]), float(r["mean_recall"])
         out.append({
-            "dataset": ds, "rho": rho, "allocator": LA_ALLOCATOR[r["policy"]], "policy": r["policy"],
+            "dataset": ds, "threads": threads, "rho": rho,
+            "allocator": LA_ALLOCATOR[r["policy"]], "policy": r["policy"],
             "fraction": round(float(r["slo_fraction"]), 3), "slo_ms": round(slo, 4),
             "profile_p95_ms": round(float(r["profile_p95_ms"]), 4),
             "ada_p95_ms": round(float(b["p95_ms"]), 3), "la_p95_ms": round(p95, 3),
@@ -67,15 +74,15 @@ def comparison(rows: list[dict]) -> list[dict]:
             "goodput_qps": round(float(r["goodput_qps"]), 1), "n_queries": int(float(r["n_queries"])),
             "generator_lag_p99_us": round(float(r["generator_lag_p99_us"]), 1), "run_id": r["run_id"],
         })
-    out.sort(key=lambda x: (x["dataset"], x["rho"], -x["fraction"], x["policy"]))
+    out.sort(key=lambda x: (x["dataset"], x["threads"], x["rho"], -x["fraction"], x["policy"]))
     return out
 
 
 def print_table(rows: list[dict]) -> None:
-    print(f"\n{'dataset':20s} {'rho':>4s} {'allocator':16s} {'frac':>5s} {'slo_ms':>9s} {'la_p95_ms':>10s} "
+    print(f"\n{'dataset':20s} {'C':>3s} {'rho':>4s} {'allocator':16s} {'frac':>5s} {'slo_ms':>9s} {'la_p95_ms':>10s} "
           f"{'meets':>5s} {'attain':>7s} {'loss_pts':>9s} {'ef_ratio':>8s}")
     for r in rows:
-        print(f"{r['dataset']:20s} {r['rho']:>4g} {r['allocator']:16s} {r['fraction']:>5.2f} "
+        print(f"{r['dataset']:20s} {r['threads']:>3d} {r['rho']:>4g} {r['allocator']:16s} {r['fraction']:>5.2f} "
               f"{r['slo_ms']:>9.4f} {r['la_p95_ms']:>10.3f} {'yes' if r['meets_slo'] else 'no':>5s} "
               f"{r['slo_attainment']:>7.3f} {r['recall_loss_pts']:>9.3f} {r['la_ef_ratio']:>8.3f}")
 
@@ -90,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--interval", type=float, default=1.0, help="length of each saved time bin in seconds")
     ap.add_argument("--keep-queries", action="store_true", help="keep each run's queries.csv (large)")
+    ap.add_argument("--force", action="store_true", help="rerun runs that already have a summary.json")
     args = ap.parse_args(argv)
 
     exp_path = Path(args.experiment)
@@ -102,9 +110,11 @@ def main(argv: list[str] | None = None) -> int:
     sc.check_inputs(sections)
 
     total, pending = sc.count_runs(sections)
+    if args.force:
+        pending = total
     print(f"{total} runs in {exp_path.name}, {pending} still to run. Details go to results/{study}/run.log", flush=True)
-    status = sc.run_with_progress([sys.executable, "-u", str(sc.RUNNER), str(exp_path)], total, pending,
-                                  study_dir / "run.log")
+    cmd = [sys.executable, "-u", str(sc.RUNNER), str(exp_path)] + (["--force"] if args.force else [])
+    status = sc.run_with_progress(cmd, total, pending, study_dir / "run.log")
     if status == 130:  # interrupted: skip the summary step; the same command continues the study
         return 130
 

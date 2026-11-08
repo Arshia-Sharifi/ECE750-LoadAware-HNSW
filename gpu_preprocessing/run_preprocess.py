@@ -131,7 +131,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--data-root", default="./data", help="raw/ and artifacts/ live here")
     ap.add_argument("--out", default=None, help="folder for small artifacts (default: <data-root>/artifacts)")
     ap.add_argument("--registry", default=None, help="path to datasets.yaml")
-    ap.add_argument("--device", default="cuda", choices=["cuda"], help="device for the GPU steps (Colab)")
+    ap.add_argument("--device", default="cuda", choices=["cuda", "cpu"],
+                    help="device for the gt, calib and stats steps. cpu is only practical for small datasets")
     ap.add_argument("--k", type=int, default=10, help="serving k (calibration ground truth width)")
     ap.add_argument("--k-store", type=int, default=100, help="ground truth columns stored")
     ap.add_argument("--calib-n", type=int, default=1000)
@@ -146,8 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     if unknown:
         ap.error(f"unknown steps: {unknown}; choose from {list(KNOWN_STEPS)}")
     gpu_steps = [s for s in steps if s in GPU_STEPS]
-    if gpu_steps and not _cuda_available():
-        ap.error(f"steps {gpu_steps} need a CUDA GPU and run on Colab; on the serving machine use --steps download,convert")
+    if gpu_steps and args.device == "cuda" and not _cuda_available():
+        ap.error(f"steps {gpu_steps} need a CUDA GPU. Run them on Colab, or pass --device cpu for a small dataset.")
 
     try:
         spec = registry.get_dataset(args.dataset, args.registry)
