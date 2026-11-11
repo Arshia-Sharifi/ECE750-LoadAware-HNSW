@@ -2,7 +2,7 @@
 //   1. drops the calibration queries that the Ada-ef table cannot use (finding 5) -> calibration/samplings_valid.bin
 //   2. for each probe length L: builds the Ada-ef table (tables/L{L}/ada_ef_adapter.bin), then runs the preference pass
 //      and the ladder sweep at L and writes tables/L{L}/price_list.json and calibration_sweep.csv
-//   3. keeps the full probe and the best shorter probe at the full probe's floor, then writes tables/probe_menu.json
+//   3. drops the probe lengths that are dominated by a longer one, and writes tables/probe_menu.json
 // The full probe length must succeed; a shorter one that fails is logged and dropped.
 // The estimator and the filtered samplings live in the dataset folder. The menu and the per-L tables go to
 // --tables-dir, so each ladder ratio (E4) can keep its own copy.
@@ -228,43 +228,26 @@ int main(int argc, char** argv) {
       }
     }
 
-    // ---- step 3: keep the full probe and the best shorter probe at the full probe's floor, then write the menu ----
-    // A shorter probe is useful only if it gives more expected recall at no more work than the full probe's floor.
-    // Among the shorter probes that pass, keep the one with the highest expected recall; the rest are dropped.
+    // ---- step 3: drop dominated probe lengths, then write the menu (plan §1A.4 step 5) ----
+    // A shorter probe is kept only if its model work and its model floor are both strictly below those of the last
+    // kept (longer) probe. Otherwise it saves nothing that the longer probe does not already offer.
     std::vector<laef::ProbeOption> kept;
-    kept.push_back(std::move(options.front()));
-    const double anchor = kept.front().price_list.model_floor_work();
-    const laef::ExpectedPoint full_at_anchor =
-        kept.front().price_list.expected_at(anchor, laef::CutKind::WaterFilling);
-    size_t best_shorter = options.size();
-    uint32_t best_shorter_len = 0;
-    double best_shorter_recall = 0, best_shorter_work = 0;
-    std::vector<laef::ExpectedPoint> at_anchor(options.size());
-    at_anchor.front() = full_at_anchor;
-    for (size_t i = 1; i < options.size(); ++i) {
-      at_anchor[i] = options[i].price_list.expected_at(anchor, laef::CutKind::WaterFilling);
-      if (at_anchor[i].work <= anchor * 1.001 && at_anchor[i].recall > full_at_anchor.recall + 1e-4 &&
-          (best_shorter == options.size() || at_anchor[i].recall > best_shorter_recall + 1e-4)) {
-        best_shorter = i;
-        best_shorter_len = options[i].probe_len;
-        best_shorter_recall = at_anchor[i].recall;
-        best_shorter_work = at_anchor[i].work;
+    for (auto& o : options) {
+      if (kept.empty()) {
+        kept.push_back(std::move(o));
+        continue;
       }
-    }
-    if (best_shorter < options.size()) kept.push_back(std::move(options[best_shorter]));
-    for (size_t i = 1; i < options.size(); ++i) {
-      if (i == best_shorter) continue;
-      std::ostringstream why;
-      why << "not selected: at the full-probe floor " << std::fixed << std::setprecision(1) << anchor
-          << " dc, expected work " << at_anchor[i].work << " dc and recall " << std::setprecision(4)
-          << at_anchor[i].recall;
-      if (best_shorter < options.size())
-        why << "; L=" << best_shorter_len << " has " << std::setprecision(4) << best_shorter_recall << " at "
-            << std::setprecision(1) << best_shorter_work << " dc";
-      else
-        why << " does not beat L=" << kept.front().probe_len << " (" << std::setprecision(4)
-            << full_at_anchor.recall << " at " << std::setprecision(1) << full_at_anchor.work << " dc)";
-      dropped.push_back({options[i].probe_len, why.str()});
+      const double nom = o.price_list.model_nominal_work(), flo = o.price_list.model_floor_work();
+      const laef::ProbeOption& last = kept.back();
+      if (nom < last.price_list.model_nominal_work() && flo < last.price_list.model_floor_work()) {
+        kept.push_back(std::move(o));
+      } else {
+        std::ostringstream why;
+        why << "dominated: model work " << std::fixed << std::setprecision(1) << nom << " dc and floor " << flo
+            << " dc are not both below L=" << last.probe_len << " (" << last.price_list.model_nominal_work() << " / "
+            << last.price_list.model_floor_work() << ")";
+        dropped.push_back({o.probe_len, why.str()});
+      }
     }
 
     laef::ProbeMenuMeta mm;
